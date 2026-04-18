@@ -49,9 +49,8 @@ from lib.supabase_client import get_supabase_admin
 from schemas.transaction import CreateTransactionRequest, Transaction, TransactionStatus
 from schemas.user import UserProfile
 
-app, rt = fast_app(secret_key=cfg.session_secret)
-app.mount("/static", StaticFiles(directory="static"), name="static")
-app = apply_middleware(app, is_production=cfg.is_production)
+fapp, rt = fast_app(secret_key=cfg.session_secret)
+fapp.mount("/static", StaticFiles(directory="static"), name="static")
 
 logger.info("Teluka starting — env=%s", cfg.env)
 
@@ -60,7 +59,7 @@ logger.info("Teluka starting — env=%s", cfg.env)
 # Health check (used by deployment platforms)
 # ---------------------------------------------------------------------------
 
-@app.get("/health")
+@fapp.get("/health")
 async def health():
     return JSONResponse({"status": "ok", "env": cfg.env})
 
@@ -683,5 +682,13 @@ async def post(tx_id: str, session):
 # Entry point
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Apply middleware last — after all routes are registered on fapp.
+# Wrapping earlier replaces `app` with a plain ASGI object that has no
+# .get() / .post() methods, breaking every route decorator above.
+# ---------------------------------------------------------------------------
+app = apply_middleware(fapp, is_production=cfg.is_production)
+
+
 if __name__ == "__main__":
-    serve()
+    serve(app="main:app")
