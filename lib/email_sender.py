@@ -69,10 +69,14 @@ def mask_email(email: str) -> str:
         return email
 
 
+_SMTP_TIMEOUT = 10  # seconds — fail fast if the port is firewalled
+
+
 async def send_otp_email(to_email: str, code: str) -> bool:
     """
     Send OTP to `to_email`. Returns True on success.
     Falls back to terminal print when Gmail is not configured.
+    Times out after 12 s so a blocked SMTP port never hangs the request.
     """
     cfg = get_config()
 
@@ -85,9 +89,19 @@ async def send_otp_email(to_email: str, code: str) -> bool:
         return False
 
     loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(
-        None, _send_gmail_sync, cfg.gmail_user, cfg.gmail_app_password, to_email, code
-    )
+    try:
+        return await asyncio.wait_for(
+            loop.run_in_executor(
+                None, _send_gmail_sync, cfg.gmail_user, cfg.gmail_app_password, to_email, code
+            ),
+            timeout=12,
+        )
+    except asyncio.TimeoutError:
+        logger.error(
+            "Gmail send timed out after 12 s — port 587 may be blocked by the host. "
+            "Check that outbound SMTP is allowed, or switch to a transactional email API."
+        )
+        return False
 
 
 def _send_gmail_sync(
@@ -106,8 +120,12 @@ def _send_gmail_sync(
     msg.attach(MIMEText(_HTML_TEMPLATE.format(code=code), "html"))
 
     try:
-        ctx = ssl.create_default_context()
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=ctx) as server:
+        # Port 587 + STARTTLS — allowed by most cloud platforms.
+        # Port 465 (SMTP_SSL) is commonly firewalled on Railway/Render/Fly.
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=_SMTP_TIMEOUT) as server:
+            server.ehlo()
+            server.starttls(context=ssl.create_default_context())
+            server.ehlo()
             server.login(gmail_user, app_password)
             server.sendmail(gmail_user, to_email, msg.as_string())
         logger.info("OTP email sent to ...%s", to_email.split("@")[-1])
@@ -116,6 +134,9 @@ def _send_gmail_sync(
         logger.error(
             "Gmail authentication failed — check GMAIL_USER and GMAIL_APP_PASSWORD"
         )
+        return False
+    except TimeoutError:
+        logger.error("SMTP connection timed out — port 587 may be blocked")
         return False
     except Exception as exc:
         logger.error("Gmail send failed: %s", exc)
