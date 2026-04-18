@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Teluka** is a Vertical Micro-SaaS for the Philippines market that combats "bait-and-switch" scams on Facebook Marketplace. It implements a "Hold-and-Release" escrow payment model (GCash/Maya via PayMongo) backed by an evidence chain (photo EXIF verification, unboxing video, delivery tracking).
+**Teluka** is a Vertical Micro-SaaS for the Philippines market that combats "bait-and-switch" scams on Facebook Marketplace. It implements a "Hold-and-Release" escrow payment model (GCash/Maya via PayMongo) backed by an evidence chain (photo EXIF verification, 48-hour dispute window, unboxing video confirmation).
 
 ## Commands
 
@@ -48,14 +48,14 @@ lib/
 | Data engine | `polars` (LazyFrame for risk log processing) |
 | Database/Auth | `supabase-py` |
 | Payments | `paymongo-python` |
-| Logistics | Lalamove / Grab API |
+| Disputes | Supabase + Polars (evidence log, arbitration state machine) |
 
 ## Anti-Scam Escrow Flow
 
 1. **Initiate** — Buyer creates a `Transaction` (Pydantic model)
 2. **Escrow** — `paymongo.create_payment_intent()` holds GCash/Maya funds
 3. **Evidence** — Seller uploads live photos to Supabase Storage; backend validates EXIF metadata
-4. **Logistics** — App polls Lalamove/Grab API until `DELIVERED`
+4. **Protect** — 48-hour buyer inspection window opens; buyer may raise a dispute with counter-evidence; Teluka arbitrates if disputed, auto-releases if no dispute raised
 5. **Release** — Buyer uploads unboxing video + confirms → `capture_payment()` fires
 
 ## Code Standards

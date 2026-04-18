@@ -44,12 +44,14 @@ from core.forensics import analyze_risk
 from core.verification import verify_photo_exif
 from lib.phone import normalize_ph_phone, PhoneValidationError
 from lib.session import get_session_user, set_session_user, clear_session
+from lib.middleware import apply_middleware
 from lib.supabase_client import get_supabase_admin
 from schemas.transaction import CreateTransactionRequest, Transaction, TransactionStatus
 from schemas.user import UserProfile
 
 app, rt = fast_app(secret_key=cfg.session_secret)
 app.mount("/static", StaticFiles(directory="static"), name="static")
+app = apply_middleware(app, is_production=cfg.is_production)
 
 logger.info("Teluka starting — env=%s", cfg.env)
 

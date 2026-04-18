@@ -1,27 +1,66 @@
 {
   "name": "Teluka — Scam-Free Marketplace",
   "short_name": "Teluka",
-  "description": "Buy and sell safely in the Philippines with escrow protection.",
+  "description": "Buy and sell safely in the Philippines with escrow protection, live photo verification, and AI scam detection.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#080810",
+  "display_override": ["standalone", "minimal-ui", "browser"],
+  "background_color": "#030307",
   "theme_color": "#0D9488",
   "orientation": "portrait-primary",
+  "lang": "en-PH",
+  "dir": "ltr",
+  "categories": ["finance", "shopping", "utilities"],
   "icons": [
     {
       "src": "/static/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/static/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
     },
     {
       "src": "/static/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/static/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Sign In",
+      "short_name": "Sign In",
+      "description": "Sign in to your Teluka account",
+      "url": "/login",
+      "icons": [{ "src": "/static/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "description": "View your active deals",
+      "url": "/dashboard",
+      "icons": [{ "src": "/static/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "New Deal",
+      "short_name": "New Deal",
+      "description": "Start a new escrow deal",
+      "url": "/transactions/new",
+      "icons": [{ "src": "/static/icons/icon-192.png", "sizes": "192x192" }]
     }
   ],
   "screenshots": [],
-  "categories": ["finance", "shopping"],
-  "lang": "en-PH"
+  "prefer_related_applications": false
 }

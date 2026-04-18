@@ -41,11 +41,12 @@ class Config:
         self.session_secret: str = _require("SESSION_SECRET")
 
         # ── PayMongo ──────────────────────────────────────────────────────────
+        self.mock_payments: bool = _optional("MOCK_PAYMENTS", "false").lower() in ("1", "true", "yes")
         self.paymongo_secret_key: str = _optional("PAYMONGO_SECRET_KEY")
-        if not self.paymongo_secret_key:
+        if not self.paymongo_secret_key and not self.mock_payments:
             logger.warning(
                 "PAYMONGO_SECRET_KEY is not set — escrow/payment features "
-                "will raise errors at runtime."
+                "will raise errors at runtime. Set MOCK_PAYMENTS=true to bypass."
             )
 
         # ── SMS ───────────────────────────────────────────────────────────────

@@ -891,11 +891,59 @@ body::before {
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
 
 /* ─── Responsive ────────────────────────────────────────────────────────────── */
+
+/* Tablet (≤ 768px) */
+@media (max-width: 768px) {
+  .auth-card  { padding: 36px 28px; max-width: 100%; }
+  .auth-toprow { margin-bottom: 20px; }
+  .vso-card   { padding: 36px 32px; min-width: 260px; }
+}
+
+/* Large phone (≤ 640px) */
 @media (max-width: 640px) {
-  .auth-card  { padding: 32px 24px; }
-  .hero       { padding: 48px 16px; }
+  .auth-page  { padding: 16px; align-items: flex-end; }
+  .auth-card  {
+    padding: 28px 20px 32px;
+    border-radius: 24px 24px 0 0;
+    max-width: 100%;
+    box-shadow: 0 -8px 40px rgba(13,148,136,0.15);
+  }
+  .auth-title { font-size: 1.3rem; }
+  .auth-sub   { font-size: 0.84rem; }
+  .auth-tabs  { margin-bottom: 20px; }
+  .auth-tab   { font-size: 0.82rem; padding: 9px 6px; }
+
+  .otp-wrap  { gap: 6px; }
+  .otp-input { width: 44px; height: 54px; font-size: 1.3rem; }
+
+  #pin-boxes .otp-input,
+  #pin-confirm-boxes .otp-input { width: 52px; height: 60px; font-size: 1.5rem; }
+
+  .btn        { padding: 13px 20px; font-size: 0.92rem; }
+  .btn-block  { width: 100%; }
+
+  .form-input { padding: 13px 14px; font-size: 0.97rem; }
+
+  .vso-card   { padding: 28px 20px; margin: 16px; min-width: unset; }
+  .vso-title  { font-size: 1.4rem; }
+  .vso-check  { width: 68px; height: 68px; }
+  .vso-icon-wrap { width: 68px; height: 68px; }
+
+  .loader-logo { width: 72px; height: 72px; font-size: 1.8rem; }
+  .loader-logo-wrap { width: 72px; height: 72px; }
+
   .navbar     { padding: 0 16px; }
-  .otp-wrap   { gap: 6px; }
-  .otp-input  { width: 44px; height: 54px; font-size: 1.3rem; }
+  .hero       { padding: 48px 16px; }
   .hero-stats { gap: 24px; }
+}
+
+/* Small phone (≤ 400px) */
+@media (max-width: 400px) {
+  .auth-card  { padding: 24px 16px 28px; }
+  .otp-input  { width: 38px; height: 48px; font-size: 1.1rem; border-radius: 10px; }
+  .otp-wrap   { gap: 5px; }
+  #pin-boxes .otp-input,
+  #pin-confirm-boxes .otp-input { width: 46px; height: 54px; font-size: 1.3rem; }
+  .auth-back-btn span { display: none; }  /* show only arrow on tiny screens */
+  .imt-btn span { display: none; }         /* icon only on tiny screens */
 }

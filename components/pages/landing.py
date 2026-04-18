@@ -6,6 +6,7 @@ def landing_page() -> FT:
         _head(),
         Body(
             _page_loader(),
+            Div(cls="scroll-progress", id="scroll-progress"),
             _bg(),
             Canvas(id="particles"),
             _top_banner(),
@@ -18,6 +19,7 @@ def landing_page() -> FT:
             _social_proof(),
             _cta(),
             _footer(),
+            _pwa_install_banner(),
             _scripts(),
         ),
     )
@@ -51,7 +53,7 @@ def _head() -> FT:
 def _top_banner() -> FT:
     ticks = (
         "🔒 Escrow-protected  ·  📸 EXIF live photo  ·  🤖 AI scam detection  ·  "
-        "⚡ GCash & Maya  ·  🚚 Lalamove tracking  ·  🪪 KYC verified  ·  "
+        "⚡ GCash & Maya  ·  ⚖️ Dispute Resolution  ·  🪪 KYC verified  ·  "
         "🇵🇭 Built for the Philippines  ·  "
     )
     return Div(cls="top-banner", id="top-banner")(
@@ -128,20 +130,40 @@ def _bg() -> FT:
 # ─── Navbar ──────────────────────────────────────────────────────────────────
 
 def _navbar() -> FT:
-    return Nav(cls="lnav", id="lnav")(
-        A("Teluka", href="/", cls="lnav-brand"),
-        Div(cls="lnav-links")(
-            A("Features", href="#features"),
-            A("How it works", href="#how"),
-            A("Reviews", href="#reviews"),
-            A("Sign In →", href="/login", cls="btn-shimmer", style="padding:10px 22px;font-size:0.88rem"),
-            Button(
-                NotStr('<svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg><svg class="icon-moon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>'),
-                id="theme-toggle",
-                cls="theme-toggle",
-                title="Toggle light / dark",
-                onclick="toggleTheme()",
+    _theme_btn = Button(
+        NotStr('<svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg><svg class="icon-moon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>'),
+        id="theme-toggle",
+        cls="theme-toggle",
+        title="Toggle light / dark",
+        onclick="toggleTheme()",
+    )
+    return Div()(
+        Nav(cls="lnav", id="lnav")(
+            A("Teluka", href="/", cls="lnav-brand"),
+            Div(cls="lnav-links")(
+                A("Features", href="#features"),
+                A("How it works", href="#how"),
+                A("Reviews", href="#reviews"),
+                A("Sign In →", href="/login", cls="btn-shimmer", style="padding:10px 22px;font-size:0.88rem"),
+                _theme_btn,
             ),
+            Div(cls="lnav-links", style="gap:8px;")(
+                _theme_btn,
+                Button(
+                    Span(), Span(), Span(),
+                    cls="nav-hamburger", id="nav-hamburger",
+                    onclick="toggleMobileNav()",
+                    aria_label="Open menu",
+                ),
+            ),
+        ),
+        # Mobile nav overlay
+        Div(cls="mobile-nav", id="mobile-nav")(
+            A("Features",     href="#features",   onclick="closeMobileNav()"),
+            A("How it works", href="#how",        onclick="closeMobileNav()"),
+            A("Reviews",      href="#reviews",    onclick="closeMobileNav()"),
+            Div(cls="mobile-nav-divider"),
+            A("Sign In →", href="/login", cls="mobile-nav-cta"),
         ),
     )
 
@@ -260,51 +282,67 @@ def _mini_detail_card(icon: str, label: str, value: str, color: str) -> FT:
 
 def _marquee() -> FT:
     items = [
-        ("md-violet", "GCash & Maya Payments"),
-        ("md-green",  "Escrow Protection"),
-        ("md-cyan",   "EXIF Photo Verification"),
-        ("md-pink",   "Unboxing Video Gate"),
-        ("md-violet", "AI Scam Detection"),
-        ("md-green",  "Lalamove Tracking"),
-        ("md-cyan",   "Supabase Realtime"),
-        ("md-pink",   "PayMongo Integration"),
-        ("md-violet", "KYC Verified Users"),
-        ("md-green",  "Zero Bait & Switch"),
+        ("md-violet", "🔒", "GCash & Maya Payments"),
+        ("md-green",  "🛡️", "Escrow Protection"),
+        ("md-cyan",   "📸", "EXIF Photo Verification"),
+        ("md-pink",   "🎥", "Unboxing Video Gate"),
+        ("md-violet", "🤖", "AI Scam Detection"),
+        ("md-green",  "⚖️", "Dispute Resolution"),
+        ("md-cyan",   "⚡", "Instant Payouts"),
+        ("md-pink",   "💳", "PayMongo Integration"),
+        ("md-violet", "🪪", "KYC Verified Users"),
+        ("md-green",  "✅", "Zero Bait & Switch"),
     ]
 
-    def item(dot_cls: str, text: str) -> FT:
+    def item(dot_cls: str, emoji: str, text: str) -> FT:
         return Div(cls="marquee-item")(
-            Div(cls=f"marquee-dot {dot_cls}"),
-            Span(text),
-            Span("·"),
+            Span(emoji, cls="marquee-emoji"),
+            Span(text, cls="marquee-text"),
+            Span(cls=f"marquee-sep"),
         )
 
-    # Duplicate for seamless loop
-    all_items = [item(d, t) for d, t in items] * 2
-    return Div(cls="marquee-wrap")(
-        Div(cls="marquee-track")(*all_items),
+    all_items = [item(d, e, t) for d, e, t in items] * 3
+    return Div(cls="marquee-section")(
+        Div(cls="marquee-label")("POWERED BY"),
+        Div(cls="marquee-wrap")(
+            Div(cls="marquee-track")(*all_items),
+        ),
+        Div(cls="marquee-wrap marquee-wrap-reverse")(
+            Div(cls="marquee-track marquee-track-reverse")(
+                *[item(d, e, t) for d, e, t in reversed(items)] * 3
+            ),
+        ),
     )
 
 
 # ─── Stats ────────────────────────────────────────────────────────────────────
 
 def _stats() -> FT:
-    return Div(
-        Div(cls="stats-bar reveal")(
-            Div(cls="stat-cell")(
-                Div("₱12M+", cls="stat-num", **{"data-count": "12000000", "data-prefix": "₱", "data-suffix": "+"}),
-                Div("Protected in Escrow", cls="stat-desc"),
-            ),
-            Div(cls="stat-cell")(
-                Div("847", cls="stat-num", **{"data-count": "847"}),
-                Div("Scams Blocked", cls="stat-desc"),
-            ),
-            Div(cls="stat-cell")(
-                Div("2,400+", cls="stat-num"),
-                Div("Verified Users", cls="stat-desc"),
-            ),
-        ),
-        style="padding:0 40px 80px; max-width:1180px; margin:0 auto",
+    stats = [
+        ("₱12M+",  "12000000", "₱", "+", "Protected in Escrow",  "🔐", "md-violet"),
+        ("847",    "847",      "",  "",  "Scams Blocked",         "🛡️",  "md-pink"),
+        ("2,400+", "2400",     "",  "+", "Verified Users",        "🪪",  "md-green"),
+    ]
+    cells = []
+    for num, count, prefix, suffix, label, icon, dot in stats:
+        cells.append(
+            Div(cls="stat-card reveal")(
+                Div(cls=f"stat-icon-wrap {dot}")(Span(icon, cls="stat-icon")),
+                Div(
+                    cls="stat-num",
+                    **{
+                        "data-count":  count,
+                        "data-prefix": prefix,
+                        "data-suffix": suffix,
+                    }
+                )(num),
+                Div(cls="stat-label")(label),
+                Div(cls="stat-glow"),
+            )
+        )
+    return Div(cls="stats-section")(
+        Div(cls="stats-eyebrow scroll-fade")("BY THE NUMBERS"),
+        Div(cls="stats-grid stagger-children")(*cells),
     )
 
 
@@ -326,7 +364,7 @@ def _features_bento() -> FT:
             _bento_risk(),           # span-4 regular
             # Row 2: regular × 3
             _bento_exif(),
-            _bento_delivery(),
+            _bento_dispute(),
             _bento_unboxing(),
             # Row 3: full + regular
             _bento_payments(),       # span-8
@@ -355,7 +393,7 @@ def _bento_escrow_flow() -> FT:
             Div(cls="flow-line")(Div(cls="flow-line-fill")),
             Div(cls="flow-node")(Div("📸", cls="flow-dot fd-done"), Div("Evidence", cls="flow-label")),
             Div(cls="flow-line"),
-            Div(cls="flow-node")(Div("🚚", cls="flow-dot fd-next"), Div("Delivery", cls="flow-label")),
+            Div(cls="flow-node")(Div("⚖️", cls="flow-dot fd-next"), Div("Review", cls="flow-label")),
             Div(cls="flow-line"),
             Div(cls="flow-node")(Div("✓", cls="flow-dot fd-next"), Div("Released", cls="flow-label")),
         ),
@@ -380,11 +418,32 @@ def _bento_exif() -> FT:
     )
 
 
-def _bento_delivery() -> FT:
+def _bento_dispute() -> FT:
+    verdict_items = [
+        ("Buyer wins",   "bi-pink",   "Evidence mismatch confirmed"),
+        ("Seller wins",  "bi-green",  "Item matches listing"),
+        ("Auto-release", "bi-violet", "No dispute in 48 h"),
+    ]
     return Div(cls="bento-cell bento-c reveal reveal-delay-2", data_tilt="true")(
-        Div(cls="bento-icon bi-blue")("🚚"),
-        H3("Delivery Tracking", cls="bento-title"),
-        P("Lalamove & Grab integration. Funds stay locked until the courier confirms DELIVERED status.", cls="bento-desc"),
+        Div(cls="bento-icon bi-blue")("⚖️"),
+        H3("Dispute Resolution", cls="bento-title"),
+        P(
+            "48-hour buyer inspection window. Raise evidence, Teluka arbitrates. "
+            "Funds never move until both sides are heard.",
+            cls="bento-desc",
+        ),
+        Div(cls="dispute-verdicts")(
+            *[
+                Div(cls=f"dispute-verdict-row")(
+                    Div(cls=f"dispute-dot {dot_cls}"),
+                    Div(cls="dispute-verdict-info")(
+                        Div(verdict, cls="dispute-verdict-label"),
+                        Div(desc, cls="dispute-verdict-sub"),
+                    ),
+                )
+                for verdict, dot_cls, desc in verdict_items
+            ]
+        ),
     )
 
 
@@ -446,8 +505,8 @@ def _how_it_works() -> FT:
          "Buyer pays via GCash or Maya. Funds are held by PayMongo, not the seller, until every condition is met."),
         ("Verify", "Seller Submits Live Evidence",
          "Seller uploads real-time photos. Teluka reads EXIF metadata and rejects anything older than 24 hours."),
-        ("Track", "Automated Delivery Tracking",
-         "A Lalamove or Grab rider handles logistics. The app polls the courier API until DELIVERED is confirmed."),
+        ("Protect", "48-Hour Buyer Review Window",
+         "After evidence is submitted, the buyer has 48 hours to inspect and raise a dispute. If anything is wrong, Teluka arbitrates — funds never auto-release until the case is resolved."),
         ("Release", "Unbox & Release Payment",
          "Buyer records an unboxing video, confirms the item, and releases payment. Seller gets paid instantly."),
     ]
@@ -465,7 +524,7 @@ def _how_it_works() -> FT:
     return Section(cls="lsection", id="how")(
         Div(cls="lsection-hd reveal")(
             Div("The Process", cls="lsection-eye"),
-            H2("Five steps. Zero scams.", cls="lsection-title"),
+            H2("Five layers. Zero scams.", cls="lsection-title"),
             P("Every deal follows the same iron-clad flow.", cls="lsection-sub"),
         ),
         Div(cls="timeline")(*step_items),
@@ -476,7 +535,7 @@ def _how_it_works() -> FT:
 
 def _social_proof() -> FT:
     reviews = [
-        ("JR", "pa-1", "Sold my RTX 4090 for ₱38,000. Buyer was in Davao, I was in Manila. Teluka held the funds, Lalamove picked it up, and I got paid the same day it was delivered. Zero stress.",
+        ("JR", "pa-1", "Sold my RTX 4090 for ₱38,000. Buyer was in Davao, I was in Manila. Teluka held the funds, the buyer had 48 hours to check everything, and I got paid the moment he confirmed. Zero stress.",
          "Jose R.", "Quezon City"),
         ("ML", "pa-2", "Tried to buy an iPhone and got scammed twice before. With Teluka the seller had to show LIVE photos. You can tell immediately if it's the real unit. Game changer talaga.",
          "Maria L.", "Cebu City"),
@@ -551,6 +610,44 @@ def _footer() -> FT:
     )
 
 
+# ─── PWA Install Banner ───────────────────────────────────────────────────────
+
+def _pwa_install_banner() -> FT:
+    return Div(cls="pwa-banner", id="pwa-banner", aria_hidden="true")(
+        # Glow ring behind the icon
+        Div(cls="pwa-banner-glow"),
+        # Left: icon + text
+        Div(cls="pwa-banner-left")(
+            Div(cls="pwa-banner-icon")(
+                Div(cls="pwa-icon-ring"),
+                Span("T", cls="pwa-icon-letter"),
+            ),
+            Div(cls="pwa-banner-copy")(
+                Div(cls="pwa-banner-title")(
+                    Span("Add Teluka", cls="pwa-title-main"),
+                    Span(" to Home Screen", cls="pwa-title-sub"),
+                ),
+                Div(cls="pwa-banner-desc")(
+                    Span(cls="pwa-desc-dot"), "Instant access  ·  Works offline  ·  No App Store needed",
+                ),
+            ),
+        ),
+        # Right: actions
+        Div(cls="pwa-banner-actions")(
+            Button("Later", cls="pwa-btn-dismiss", id="pwa-dismiss", type="button"),
+            Button(cls="pwa-btn-install", id="pwa-install", type="button")(
+                Div(cls="pwa-btn-shimmer"),
+                NotStr('<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>'),
+                Span("Install App"),
+            ),
+        ),
+        # Close ×
+        Button(cls="pwa-banner-close", id="pwa-close", type="button", aria_label="Dismiss")(
+            NotStr('<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'),
+        ),
+    )
+
+
 # ─── Inline SVG icons ─────────────────────────────────────────────────────────
 
 def _icon_shield() -> FT:
@@ -565,9 +662,75 @@ def _icon_play() -> FT:
 
 def _scripts() -> FT:
     return Script("""
-/* ── PWA ── */
+/* ── PWA service worker ── */
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('/static/sw.js'));
+}
+
+/* ── PWA install banner ── */
+(function () {
+  const DISMISSED_KEY = 'teluka-pwa-dismissed';
+  const banner  = document.getElementById('pwa-banner');
+  const btnInstall  = document.getElementById('pwa-install');
+  const btnDismiss  = document.getElementById('pwa-dismiss');
+  const btnClose    = document.getElementById('pwa-close');
+  let deferredPrompt = null;
+
+  function showBanner() {
+    if (!banner || sessionStorage.getItem(DISMISSED_KEY)) return;
+    banner.classList.add('pwa-banner--visible');
+    banner.removeAttribute('aria-hidden');
+  }
+
+  function hideBanner() {
+    if (!banner) return;
+    banner.classList.remove('pwa-banner--visible');
+    banner.setAttribute('aria-hidden', 'true');
+    sessionStorage.setItem(DISMISSED_KEY, '1');
+  }
+
+  /* Intercept the browser's native prompt */
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    /* Show after 3 s — give the page time to load */
+    setTimeout(showBanner, 3000);
+  });
+
+  /* Already installed → never show */
+  window.addEventListener('appinstalled', () => {
+    hideBanner();
+    deferredPrompt = null;
+  });
+
+  if (btnInstall) {
+    btnInstall.addEventListener('click', async () => {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      hideBanner();
+    });
+  }
+
+  if (btnDismiss) btnDismiss.addEventListener('click', hideBanner);
+  if (btnClose)   btnClose.addEventListener('click', hideBanner);
+})();
+
+/* ── Mobile nav ── */
+function toggleMobileNav() {
+  const nav = document.getElementById('mobile-nav');
+  const btn = document.getElementById('nav-hamburger');
+  const open = nav.classList.toggle('open');
+  btn.classList.toggle('open', open);
+  document.body.style.overflow = open ? 'hidden' : '';
+}
+function closeMobileNav() {
+  const nav = document.getElementById('mobile-nav');
+  const btn = document.getElementById('nav-hamburger');
+  nav.classList.remove('open');
+  btn.classList.remove('open');
+  document.body.style.overflow = '';
 }
 
 /* ── Theme toggle ── */
@@ -585,51 +748,85 @@ function toggleTheme() {
   if (btn && t === 'light') btn.classList.add('is-light');
 })();
 
-/* ── Navbar scroll + banner 3D fold-away + parallax ── */
-const lnav  = document.getElementById('lnav');
+/* ── Scroll progress bar ── */
+const scrollProgress = document.getElementById('scroll-progress');
+function updateScrollProgress() {
+  const scrollTop = window.scrollY;
+  const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+  const pct = docHeight > 0 ? (scrollTop / docHeight) * 100 : 0;
+  if (scrollProgress) scrollProgress.style.width = pct + '%';
+}
+
+/* ── Navbar + banner + parallax on scroll ── */
+const lnav    = document.getElementById('lnav');
 const tBanner = document.getElementById('top-banner');
 const BANNER_H = 48;
 
 window.addEventListener('scroll', () => {
   const y = window.scrollY;
 
-  /* navbar glass blur */
+  /* scroll progress */
+  updateScrollProgress();
+
+  /* navbar glass */
   lnav.classList.toggle('scrolled', y > BANNER_H + 10);
 
-  /* ── banner 3D fold-away ── */
+  /* banner 3D fold-away */
   if (tBanner) {
-    const p = Math.min(y / BANNER_H, 1);           // 0 → 1 as banner exits
-    const rotX   = p * -90;                         // folds back around X
-    const scaleZ = 1 - p * 0.4;
-    tBanner.style.transform =
-      `perspective(300px) rotateX(${rotX}deg) scaleY(${scaleZ})`;
+    const p = Math.min(y / BANNER_H, 1);
+    tBanner.style.transform = `perspective(300px) rotateX(${p * -90}deg) scaleY(${1 - p * 0.4})`;
     tBanner.style.opacity   = String(Math.max(1 - p * 2, 0));
     tBanner.style.pointerEvents = p >= 1 ? 'none' : '';
     document.body.classList.toggle('banner-gone', p >= 1);
   }
 
-  /* ── subtle hero parallax ── */
+  /* aurora orb parallax */
   const orbs = document.querySelectorAll('.aurora-orb');
   orbs.forEach((orb, i) => {
     const speed = [0.08, 0.14, 0.06, 0.12][i] || 0.1;
     orb.style.transform = `translateY(${y * speed}px)`;
   });
 
-  /* ── scroll depth on hero headline ── */
+  /* hero headline depth */
   const heroLeft = document.querySelector('.hero-left');
   if (heroLeft) {
     const pct = Math.min(y / 600, 1);
     heroLeft.style.transform = `translateY(${pct * 60}px) scale(${1 - pct * 0.04})`;
     heroLeft.style.opacity   = String(1 - pct * 1.2);
   }
+
+  /* stat cards subtle parallax */
+  const statCards = document.querySelectorAll('.stat-card');
+  statCards.forEach((card, i) => {
+    const rect  = card.getBoundingClientRect();
+    const mid   = rect.top + rect.height / 2 - window.innerHeight / 2;
+    const shift = mid * 0.04 * (i % 2 === 0 ? 1 : -1);
+    if (!card.matches(':hover')) {
+      card.style.transform = `translateY(${shift}px)`;
+    }
+  });
+
 }, { passive: true });
 
-/* ── Scroll reveal ── */
-const revealEls = document.querySelectorAll('.reveal');
-const observer = new IntersectionObserver((entries) => {
-  entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); observer.unobserve(e.target); } });
-}, { threshold: 0.12 });
-revealEls.forEach(el => observer.observe(el));
+/* ── Scroll reveal (legacy .reveal + new scroll-* classes) ── */
+const revealObs = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.classList.add('visible', 'in-view');
+      revealObs.unobserve(e.target);
+    }
+  });
+}, { threshold: 0.1, rootMargin: '0px 0px -60px 0px' });
+
+document.querySelectorAll('.reveal, .scroll-fade, .scroll-zoom, .scroll-left, .scroll-right')
+  .forEach(el => revealObs.observe(el));
+
+/* ── Stagger children of .stagger-children ── */
+document.querySelectorAll('.stagger-children').forEach(parent => {
+  Array.from(parent.children).forEach((child, i) => {
+    child.style.transitionDelay = (i * 0.08) + 's';
+  });
+});
 
 /* ── 3D tilt on bento cells ── */
 document.querySelectorAll('[data-tilt]').forEach(card => {
