@@ -17,8 +17,6 @@ from typing import Callable
 
 from starlette.datastructures import Headers
 from starlette.middleware.gzip import GZipMiddleware
-from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
-from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse, Response
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -222,20 +220,21 @@ class RateLimitMiddleware:
 def apply_middleware(app: ASGIApp, *, is_production: bool) -> ASGIApp:
     """
     Wrap the app with all middleware in the correct order.
-    Call once after fast_app() returns.
+    Call once after all routes are registered on the FastHTML app.
 
-    Starlette middleware is applied bottom-up, so list order here
-    is outermost-last (last added = first to see a request).
+    Starlette middleware is applied bottom-up: last added = outermost
+    (first to receive a request, last to send a response).
+
+    NOTE: HTTPSRedirectMiddleware is intentionally omitted.
+    All deployment platforms (Railway, Render, Fly.io) terminate TLS at
+    the edge and forward plain HTTP to the container. Adding
+    HTTPSRedirectMiddleware here causes infinite 307 redirect loops because
+    the container only ever sees HTTP. Let the platform handle HTTPS.
     """
     # Always active
     app = GZipMiddleware(app, minimum_size=1024)
     app = RateLimitMiddleware(app)
     app = SecurityHeadersMiddleware(app)
     app = RequestLoggingMiddleware(app)
-
-    # Production-only
-    if is_production:
-        app = TrustedHostMiddleware(app, allowed_hosts=["teluka.app", "*.teluka.app"])
-        app = HTTPSRedirectMiddleware(app)
 
     return app
