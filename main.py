@@ -691,4 +691,4 @@ app = apply_middleware(fapp, is_production=cfg.is_production)
 
 
 if __name__ == "__main__":
-    serve(app="main:app")
+    serve()
