@@ -67,12 +67,13 @@
 }
 .nd-back-btn:hover { color: var(--jade-light); }
 
-/* ── Card ── */
+/* ── Card — matches profile-card and deal-info-card exactly ── */
 .nd-card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 20px;
   padding: 20px;
+  margin-bottom: 0;
 }
 [data-theme="light"] .nd-card { background: #fff; }
 
@@ -85,7 +86,7 @@
   margin-bottom: 4px;
 }
 .nd-card-sub {
-  font-size: 0.82rem; color: var(--muted);
+  font-size: 0.82rem; color: var(--subtle);
   line-height: 1.5; margin-bottom: 18px;
 }
 
@@ -378,19 +379,56 @@
 
 /* ── Mobile tweaks ── */
 @media (max-width: 640px) {
-  .nd-wrap       { padding: 0 0 80px; }
-  .nd-title      { font-size: 1.1rem; }
-  .nd-card       { padding: 16px; border-radius: 16px; }
-  .nd-card-title { font-size: 0.95rem; }
-  .nd-prog-label { display: none; }
-  .nd-plan-card  { padding: 12px; }
-  .nd-plan-name  { font-size: 0.88rem; }
-  .nd-plan-icon  { font-size: 1rem; }
+  .nd-wrap        { padding: 0 0 80px; }
+  .nd-title-row   { margin-bottom: 14px; }
+  .nd-title       { font-size: 1.05rem; }
+  .nd-title-sub   { font-size: 0.72rem; }
+  .nd-progress    { margin-bottom: 14px; }
+  .nd-prog-label  { display: none; }
+  .nd-prog-step   { font-size: 0.78rem; }
+  .nd-card        { padding: 14px; border-radius: 14px; }
+  .nd-card-icon   { font-size: 1.2rem; margin-bottom: 5px; }
+  .nd-card-title  { font-size: 0.9rem; margin-bottom: 2px; }
+  .nd-card-sub    { font-size: 0.78rem; margin-bottom: 12px; }
+  .nd-phone-input { height: 42px; font-size: 0.9rem; }
+  .nd-prefix      { height: 42px; font-size: 0.82rem; padding: 0 10px; }
+  .nd-amount-input  { height: 44px; font-size: 0.95rem; }
+  .nd-amount-prefix { height: 44px; }
+  .nd-lookup-btn  { height: 42px; font-size: 0.88rem; }
+  .nd-back-btn    { font-size: 0.72rem; margin-bottom: 8px; }
+  .nd-checklist   { padding: 10px 12px; margin-top: 12px; gap: 6px; }
+  .nd-checklist-title { font-size: 0.62rem; }
+  .nd-check-row   { font-size: 0.75rem; gap: 6px; }
+  .nd-plan-card   { padding: 11px 12px; }
+  .nd-plan-name   { font-size: 0.85rem; }
+  .nd-plan-tagline { font-size: 0.68rem; }
+  .nd-plan-icon   { font-size: 1rem; }
+  .nd-plan-fee    { font-size: 0.65rem; padding: 2px 7px; }
+  .nd-plan-radio  { width: 14px; height: 14px; }
+  .nd-summary     { padding: 10px 12px; }
+  .nd-summary-row { font-size: 0.78rem; }
+  .nd-summary-total { font-size: 0.88rem; }
+  .nd-perk        { font-size: 0.7rem; }
+  .nd-amount-preview { padding: 8px 12px; }
+  .nd-preview-val { font-size: 1rem; }
+  /* form-group spacing */
+  .form-group     { margin-bottom: 12px; }
+  .form-hint      { font-size: 0.68rem; }
 }
+
 @media (max-width: 400px) {
-  .nd-card       { padding: 14px; }
-  .nd-plan-card  { padding: 10px 12px; }
-  .nd-plan-fee   { font-size: 0.65rem; padding: 2px 7px; }
+  .nd-card          { padding: 12px; }
+  .nd-card-title    { font-size: 0.85rem; }
+  .nd-card-sub      { font-size: 0.74rem; margin-bottom: 10px; }
+  .nd-phone-input   { height: 40px; }
+  .nd-prefix        { height: 40px; padding: 0 8px; font-size: 0.78rem; }
+  .nd-amount-input  { height: 42px; }
+  .nd-amount-prefix { height: 42px; }
+  .nd-plan-card     { padding: 10px; }
+  .nd-plan-fee      { font-size: 0.6rem; padding: 2px 6px; }
+  .nd-plan-name     { font-size: 0.82rem; }
+  .nd-plan-header   { gap: 7px; }
+  .nd-plan-recommended::after { display: none; }
 }
 
 /* ─── Step indicators (top of new-deal page) ─────────────────────────────── */

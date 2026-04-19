@@ -18,7 +18,7 @@ cfg = get_config()
 
 from datetime import datetime as _dt
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, HTMLResponse
 from starlette.staticfiles import StaticFiles
 from fasthtml.common import *
 
@@ -248,7 +248,7 @@ async def post(request: Request, session):
         return Div(Div("Account error. Please contact support.", cls="toast toast-error"))
 
     logger.info("User logged in user=%s", user_id)
-    return Div(
+    overlay = Div(
         Div(cls="verify-success-overlay")(
             Div(cls="vso-backdrop"),
             Div(cls="vso-card")(
@@ -272,6 +272,10 @@ async def post(request: Request, session):
         ),
         Script("setTimeout(() => { window.location.href = '/dashboard'; }, 2000);"),
     )
+    return HTMLResponse(
+        content=to_xml(overlay),
+        headers={"HX-Retarget": "#vso-portal", "HX-Reswap": "innerHTML"},
+    )
 
 
 @rt("/set-pin")
@@ -292,7 +296,7 @@ async def post(phone: str, email: str, pin: str, pin_confirm: str, session):
         return Div(Div("Account error. Please contact support.", cls="toast toast-error"))
 
     logger.info("New user created with PIN user=%s", user_id)
-    return Div(
+    overlay = Div(
         Div(cls="verify-success-overlay")(
             Div(cls="vso-backdrop"),
             Div(cls="vso-card")(
@@ -315,6 +319,10 @@ async def post(phone: str, email: str, pin: str, pin_confirm: str, session):
             ),
         ),
         Script("setTimeout(() => { window.location.href = '/dashboard'; }, 2000);"),
+    )
+    return HTMLResponse(
+        content=to_xml(overlay),
+        headers={"HX-Retarget": "#vso-portal", "HX-Reswap": "innerHTML"},
     )
 
 

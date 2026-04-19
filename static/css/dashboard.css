@@ -765,12 +765,12 @@
   border: 1px solid var(--border);
   border-radius: 20px;
   padding: 20px;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 [data-theme="light"] .profile-card { background: #fff; }
 
 .profile-card-title {
-  font-size: 0.68rem; font-weight: 700;
+  font-size: 0.72rem; font-weight: 700;
   text-transform: uppercase; letter-spacing: 0.1em;
   color: var(--muted); margin-bottom: 16px;
 }
@@ -805,8 +805,11 @@
 /* ─── Verification row ───────────────────────────────────────────────────── */
 .verify-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 10px;
+}
+@media (min-width: 480px) {
+  .verify-grid { grid-template-columns: 1fr 1fr; }
 }
 
 .verify-item {
@@ -939,97 +942,110 @@
 .pf-edit-panel.pf-edit-open {
   max-height: 600px;
   opacity: 1;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
-.pf-field { margin-bottom: 14px; }
+.pf-field { margin-bottom: 16px; }
 
+/* Match form-label style from app.css */
 .pf-label {
   display: block;
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  margin-bottom: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--subtle);
+  letter-spacing: 0.02em;
+  margin-bottom: 8px;
 }
 
+/* Match form-input border-radius + focus ring from app.css */
 .pf-input-wrap {
   display: flex;
   align-items: center;
   gap: 10px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
   padding: 0 14px;
-  transition: border-color 0.2s;
+  transition: border-color var(--transition), box-shadow var(--transition);
 }
-[data-theme="light"] .pf-input-wrap { background: rgba(0,0,0,0.03); }
-.pf-input-wrap:focus-within { border-color: rgba(13,148,136,0.5); }
+[data-theme="light"] .pf-input-wrap { background: var(--surface); }
+.pf-input-wrap:focus-within {
+  border-color: var(--jade-primary);
+  box-shadow: 0 0 0 3px rgba(13,148,136,0.2);
+}
 
 .pf-input-wrap.pf-readonly { opacity: 0.55; }
-.pf-input-wrap.pf-readonly:focus-within { border-color: var(--border); }
+.pf-input-wrap.pf-readonly:focus-within {
+  border-color: var(--border-strong);
+  box-shadow: none;
+}
 
-.pf-input-icon { font-size: 1rem; flex-shrink: 0; }
+.pf-input-icon { font-size: 1rem; flex-shrink: 0; color: var(--muted); }
 
+/* Match form-input font-size + padding from app.css */
 .pf-input {
   flex: 1;
   background: none;
   border: none;
   outline: none;
   color: var(--text);
-  font-size: 0.9rem;
+  font-size: 1rem;
   font-family: inherit;
-  font-weight: 500;
-  padding: 12px 0;
+  padding: 14px 0;
 }
 .pf-input:disabled { cursor: not-allowed; }
-.pf-input::placeholder { color: var(--muted); opacity: 0.6; }
+.pf-input::placeholder { color: var(--muted); }
 
+/* Match form-hint from app.css */
 .pf-hint {
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   color: var(--muted);
-  margin-top: 5px;
+  margin-top: 8px;
   line-height: 1.5;
 }
 
 .pf-actions {
   display: flex;
   gap: 10px;
-  margin-top: 18px;
+  margin-top: 20px;
 }
+/* Match btn-ghost: pill shape, border, muted color */
 .pf-cancel-btn {
   flex: 1;
-  padding: 12px;
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  background: rgba(255,255,255,0.04);
-  color: var(--muted);
-  font-size: 0.88rem;
+  padding: 12px 20px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.9rem;
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
-  transition: color 0.2s, border-color 0.2s;
+  transition: background var(--transition), color var(--transition);
 }
-[data-theme="light"] .pf-cancel-btn { background: rgba(0,0,0,0.04); }
-.pf-cancel-btn:hover { color: var(--text); border-color: var(--border-strong); }
+[data-theme="light"] .pf-cancel-btn { background: var(--surface); }
+.pf-cancel-btn:hover { background: var(--surface-hover); }
 
+/* Match btn-primary: pill, gradient, shadow */
 .pf-save-btn {
   flex: 2;
-  padding: 12px;
-  border-radius: 12px;
+  padding: 12px 20px;
+  border-radius: var(--radius-pill);
   border: none;
   background: var(--grad-hero);
   color: #fff;
-  font-size: 0.88rem;
+  font-size: 0.9rem;
   font-weight: 700;
   font-family: inherit;
   cursor: pointer;
-  box-shadow: 0 3px 12px rgba(13,148,136,0.4);
-  transition: opacity 0.2s, transform 0.15s;
+  box-shadow: 0 4px 20px rgba(13,148,136,0.4);
+  transition: transform var(--transition), box-shadow var(--transition), opacity var(--transition);
 }
-.pf-save-btn:hover { opacity: 0.88; transform: translateY(-1px); }
-.pf-save-btn:active { transform: none; }
+.pf-save-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 28px rgba(13,148,136,0.55);
+}
+.pf-save-btn:active { transform: translateY(0); }
 
 /* PIN row */
 .pf-pin-row {
@@ -1093,12 +1109,13 @@
 }
 
 /* Benefits grid */
+/* Same as profile-card-title — unified section label style */
 .vc-benefits-title {
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   font-weight: 700;
   color: var(--muted);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   margin-bottom: 12px;
 }
 
@@ -1214,69 +1231,172 @@
   align-items: stretch !important;
   gap: 10px;
 }
-.vi-form { display: flex; flex-direction: column; gap: 8px; flex: 1; }
+.vi-form { display: flex; flex-direction: column; gap: 10px; flex: 1; }
+/* Match form-input style from app.css */
 .vi-input {
   width: 100%;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
   color: var(--text);
-  font-size: 0.88rem;
+  font-size: 1rem;
   font-family: inherit;
-  padding: 10px 12px;
+  padding: 13px 14px;
   outline: none;
-  transition: border-color 0.2s;
+  transition: border-color var(--transition), box-shadow var(--transition);
   box-sizing: border-box;
 }
-[data-theme="light"] .vi-input { background: rgba(0,0,0,0.03); }
-.vi-input:focus { border-color: rgba(13,148,136,0.5); }
-.vi-input::placeholder { color: var(--muted); opacity: 0.6; }
+.vi-input:focus {
+  border-color: var(--jade-primary);
+  box-shadow: 0 0 0 3px rgba(13,148,136,0.2);
+}
+.vi-input::placeholder { color: var(--muted); }
 
 .vi-form-row { display: flex; gap: 8px; }
+/* Match btn-ghost: pill */
 .vi-cancel {
-  flex: 1; padding: 9px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: rgba(255,255,255,0.04);
-  color: var(--muted); font-size: 0.8rem; font-weight: 600;
+  flex: 1; padding: 11px 16px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text); font-size: 0.88rem; font-weight: 600;
   cursor: pointer; font-family: inherit;
-  transition: color 0.2s;
+  transition: background var(--transition);
 }
-[data-theme="light"] .vi-cancel { background: rgba(0,0,0,0.04); }
-.vi-cancel:hover { color: var(--text); }
+.vi-cancel:hover { background: var(--surface-hover); }
 
+/* Match btn-primary: pill, gradient */
 .vi-submit {
-  flex: 2; padding: 9px;
-  border-radius: 10px; border: none;
+  flex: 2; padding: 11px 16px;
+  border-radius: var(--radius-pill); border: none;
   background: var(--grad-hero); color: #fff;
-  font-size: 0.8rem; font-weight: 700;
+  font-size: 0.88rem; font-weight: 700;
   cursor: pointer; font-family: inherit;
-  transition: opacity 0.2s;
+  box-shadow: 0 4px 14px rgba(13,148,136,0.35);
+  transition: transform var(--transition), box-shadow var(--transition);
 }
-.vi-submit:hover { opacity: 0.88; }
+.vi-submit:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(13,148,136,0.5);
+}
+.vi-submit:active { transform: none; }
 
 .vi-sent-msg {
-  font-size: 0.78rem; color: var(--muted);
+  font-size: 0.8rem; color: var(--muted);
   line-height: 1.5; margin: 0;
 }
 
-/* Toast */
+/* Floating app toast — overrides app.css inline toast for app pages */
 .toast {
-  padding: 12px 18px;
-  border-radius: 14px;
-  font-size: 0.85rem;
+  padding: 13px 20px;
+  border-radius: var(--radius);
+  font-size: 0.9rem;
   font-weight: 600;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  animation: toast-in 0.3s cubic-bezier(0.16,1,0.3,1) both;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+}
+.toast-success {
+  background: rgba(13,148,136,0.88);
+  color: #fff;
+  border: 1px solid rgba(13,148,136,0.5);
+}
+.toast-error {
+  background: rgba(251,113,133,0.88);
+  color: #fff;
+  border: 1px solid rgba(251,113,133,0.5);
+  /* Remove shake — floating toast, not inline error */
   animation: toast-in 0.3s cubic-bezier(0.16,1,0.3,1) both;
 }
-.toast-success { background: rgba(13,148,136,0.85); color: #fff; border: 1px solid rgba(13,148,136,0.5); }
-.toast-error   { background: rgba(251,113,133,0.85); color: #fff; border: 1px solid rgba(251,113,133,0.5); }
-@keyframes toast-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
 
-@media (max-width: 480px) {
-  .vc-benefits-grid { grid-template-columns: 1fr; }
-  .vb-item { padding: 10px; }
+/* ─── Profile responsive ──────────────────────────────────────────────────── */
+
+/* Desktop 1024px+: side-by-side layout for some profile cards */
+@media (min-width: 1024px) {
+  .verify-grid { gap: 14px; }
+  .vc-benefits-grid { gap: 12px; }
+  .vb-title { font-size: 0.82rem; }
+  .vb-desc  { font-size: 0.72rem; }
+  .pf-field { margin-bottom: 16px; }
+}
+
+/* Tablet 640–1023px */
+@media (min-width: 640px) and (max-width: 1023px) {
+  .vc-benefits-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
+  .verify-grid      { grid-template-columns: 1fr 1fr; gap: 12px; }
+}
+
+/* Mobile ≤640px */
+@media (max-width: 640px) {
+  /* Profile hero */
+  .profile-hero    { padding: 4px 0 20px; }
+  .profile-name    { font-size: 0.95rem; }
+  .profile-email   { font-size: 0.72rem; margin-top: -6px; }
+  .profile-badges  { gap: 5px; }
+  .profile-badge   { font-size: 0.65rem; padding: 3px 8px; }
+
+  /* Edit panel */
+  .pf-input        { font-size: 0.85rem; padding: 10px 0; }
+  .pf-label        { font-size: 0.68rem; }
+  .pf-hint         { font-size: 0.65rem; }
+  .pf-actions      { margin-top: 14px; gap: 8px; }
+  .pf-save-btn,
+  .pf-cancel-btn   { padding: 10px; font-size: 0.82rem; }
+  .pf-pin-title    { font-size: 0.82rem; }
+  .pf-pin-sub      { font-size: 0.68rem; }
+
+  /* Trust card */
+  .profile-trust-val { font-size: 1.8rem; }
+
+  /* Stats */
+  .stat-chip     { padding: 12px 8px; }
+  .stat-chip-val { font-size: 1.2rem; }
+  .stat-chip-lbl { font-size: 0.6rem; }
+
+  /* Verification card */
+  .vc-shield        { font-size: 1.4rem; }
+  .vc-benefits-grid { grid-template-columns: 1fr; gap: 8px; }
+  .vb-item          { padding: 10px; gap: 8px; }
+  .vb-icon          { font-size: 1.1rem; }
+  .vb-title         { font-size: 0.75rem; }
+  .vb-desc          { font-size: 0.65rem; }
+  .vc-step-text     { font-size: 0.78rem; }
+  .vc-step-num      { width: 20px; height: 20px; font-size: 0.65rem; }
+  .vc-benefits-title { font-size: 0.62rem; }
+
+  /* Wallet verify items */
+  .verify-grid { grid-template-columns: 1fr; gap: 8px; }
+  .verify-item { padding: 11px 12px; }
+  .verify-label { font-size: 0.82rem; }
+  .verify-status { font-size: 0.65rem; }
+  .vi-start-btn { padding: 5px 10px; font-size: 0.7rem; }
+
+  /* Inline verify form */
+  .vi-input { font-size: 0.84rem; padding: 9px 10px; }
+  .vi-sent-msg { font-size: 0.74rem; }
+  .vi-cancel, .vi-submit { padding: 8px; font-size: 0.76rem; }
+
+  /* Settings */
+  .settings-item { font-size: 0.85rem; padding: 11px 4px; }
+  .settings-item-icon { width: 32px; height: 32px; font-size: 0.9rem; }
+}
+
+/* Very small ≤400px */
+@media (max-width: 400px) {
+  .profile-card    { padding: 14px; border-radius: 16px; }
+  .vc-benefits-grid { gap: 6px; }
+  .vb-item         { padding: 9px; gap: 7px; }
+  .vb-title        { font-size: 0.72rem; }
+  .vb-desc         { font-size: 0.62rem; }
+  .verify-item     { padding: 10px; }
+  .pf-pin-row      { flex-wrap: wrap; }
+  .pf-pin-link     { width: 100%; text-align: right; font-size: 0.75rem; }
+  .profile-trust-val { font-size: 1.5rem; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

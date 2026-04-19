@@ -19,6 +19,37 @@ def _ico_shield() -> FT:
     return Svg(NotStr('<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>'), xmlns="http://www.w3.org/2000/svg", viewBox="0 0 24 24", fill="none", stroke="currentColor", stroke_width="2", stroke_linecap="round", stroke_linejoin="round", width="13", height="13")
 
 
+# ─── Step chrome helpers ─────────────────────────────────────────────────────
+
+_HIDE_CHROME = """
+(function(){
+  ['auth-headline','auth-tabs-row'].forEach(function(id){
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.style.maxHeight = el.scrollHeight + 'px';
+    el.offsetHeight;
+    el.style.maxHeight = '0';
+    el.style.opacity = '0';
+    el.style.marginBottom = '0';
+    el.style.pointerEvents = 'none';
+  });
+})();
+"""
+
+_SHOW_CHROME = """
+(function(){
+  ['auth-headline','auth-tabs-row'].forEach(function(id){
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.style.maxHeight = '220px';
+    el.style.opacity = '1';
+    el.style.marginBottom = '';
+    el.style.pointerEvents = '';
+  });
+})();
+"""
+
+
 # ─── Page shell ───────────────────────────────────────────────────────────────
 
 def login_page(error: str | None = None) -> FT:
@@ -45,11 +76,13 @@ def login_page(error: str | None = None) -> FT:
                         ),
                     ),
 
-                    H1("Welcome back", cls="auth-title"),
-                    P("Secure escrow for Philippines marketplace deals.", cls="auth-sub"),
+                    Div(id="auth-headline")(
+                        H1("Welcome back", cls="auth-title"),
+                        P("Secure escrow for Philippines marketplace deals.", cls="auth-sub"),
+                    ),
 
                     # Sign In / Sign Up tabs
-                    Div(cls="auth-tabs")(
+                    Div(cls="auth-tabs", id="auth-tabs-row")(
                         Div(cls="auth-tab-slider", id="tab-slider"),
                         Button("Sign In", cls="auth-tab active", id="tab-signin",
                                onclick="switchTab('signin')", type="button"),
@@ -69,6 +102,8 @@ def login_page(error: str | None = None) -> FT:
                     _trust_badges(),
                 ),
             ),
+            # Portal outside backdrop-filter context so position:fixed overlays center on viewport
+            Div(id="vso-portal"),
             Script(_TAB_SCRIPT),
             _pwa_script(),
         ),
@@ -187,6 +222,7 @@ def identifier_form_fragment(error: str | None = None) -> FT:
     return Div(
         Div(id="pane-signin")(_signin_form(error=error)),
         Div(id="pane-signup", style="display:none")(_signup_form()),
+        Script(_SHOW_CHROME),
         Script(_TAB_SCRIPT),
     )
 
@@ -259,6 +295,7 @@ def signup_form_fragment(phone: str = "", email: str = "", error: str | None = N
     return Div(
         Div(id="pane-signin", style="display:none")(_signin_form()),
         Div(id="pane-signup")(_signup_form(phone=phone, email=email, error=error)),
+        Script(_SHOW_CHROME),
         Script("""
 (function(){
   var btnIn  = document.getElementById('tab-signin');
@@ -367,6 +404,7 @@ def otp_step(masked_email: str, email: str, error: str | None = None, _phone: st
             ),
         ),
 
+        Script(_HIDE_CHROME),
         Script(_OTP_SCRIPT),
     )
 
@@ -603,6 +641,7 @@ def pin_step(phone: str, email: str, error: str | None = None) -> FT:
             ),
         ),
 
+        Script(_HIDE_CHROME),
         Script(_PIN_SCRIPT),
     )
 
@@ -685,6 +724,20 @@ def _head() -> FT:
             rel="stylesheet",
         ),
         Link(rel="stylesheet", href="/static/css/app.css"),
+        Style("""
+          #auth-headline, #auth-tabs-row {
+            overflow: hidden;
+            transition: max-height 0.35s cubic-bezier(0.4,0,0.2,1),
+                        opacity 0.25s ease,
+                        margin-bottom 0.3s ease;
+          }
+          #auth-step {
+            transition: opacity 0.18s ease;
+          }
+          #auth-step.htmx-swapping {
+            opacity: 0;
+          }
+        """),
         Script(src="https://unpkg.com/htmx.org@1.9.12"),
         Script(
             "(function(){var t=localStorage.getItem('teluka-theme')||"
