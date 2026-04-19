@@ -120,16 +120,19 @@ def _stats_card(total: int, completed: int, scam_reports: int) -> FT:
     return Div(cls="profile-card")(
         Div("Activity", cls="profile-card-title"),
         Div(cls="stats-row")(
-            _stat_chip(str(total),        "Deals"),
-            _stat_chip(str(completed),    "Completed"),
-            _stat_chip(str(scam_reports), "Reports"),
+            _stat_chip(total,        "Deals"),
+            _stat_chip(completed,    "Completed"),
+            _stat_chip(scam_reports, "Reports"),
         ),
     )
 
 
-def _stat_chip(val: str, lbl: str) -> FT:
+def _stat_chip(val: int, lbl: str) -> FT:
     return Div(cls="stat-chip")(
-        Div(val, cls="stat-chip-val"),
+        Div(
+            str(val), cls="stat-chip-val",
+            **{"data-count": str(val), "data-prefix": "", "data-suffix": ""},
+        ),
         Div(lbl, cls="stat-chip-lbl"),
     )
 
@@ -145,12 +148,13 @@ def _verification_card(user: UserProfile) -> FT:
 
 
 def _verify_item(label: str, emoji: str, verified: bool) -> FT:
-    return Div(cls="verify-item")(
+    extra_cls = "verify-unverified-pulse" if not verified else ""
+    return Div(cls=f"verify-item {extra_cls}")(
         Div(emoji, cls=f"verify-icon {'verified' if verified else 'unverified'}"),
         Div(
             Div(label, cls="verify-label"),
             Div(
-                "Connected" if verified else "Not connected",
+                "✓ Connected" if verified else "Tap to connect",
                 cls=f"verify-status {'ok' if verified else 'no'}",
             ),
         ),
@@ -426,6 +430,59 @@ function updateThemeLabel() {
     ? 'Dark' : 'Light';
 }
 document.addEventListener('DOMContentLoaded', updateThemeLabel);
+
+/* ── Profile card stagger entrance ── */
+(function() {
+  var cards = document.querySelectorAll('.profile-card, .profile-hero');
+  cards.forEach(function(card, i) {
+    card.style.opacity = '0';
+    card.style.transform = 'translateY(18px)';
+    card.style.transition = 'opacity 0.45s cubic-bezier(0.16,1,0.3,1), transform 0.45s cubic-bezier(0.16,1,0.3,1)';
+    setTimeout(function() {
+      card.style.opacity = '1';
+      card.style.transform = 'translateY(0)';
+    }, 60 + i * 70);
+  });
+})();
+
+/* ── Count-up stat chips ── */
+(function() {
+  function animateCount(el) {
+    var target = parseInt(el.getAttribute('data-count') || '0', 10);
+    if (target === 0) return;
+    var start = performance.now();
+    var dur = 900;
+    function tick(now) {
+      var p = Math.min((now - start) / dur, 1);
+      var ease = 1 - Math.pow(1 - p, 3);
+      el.textContent = Math.floor(ease * target).toString();
+      if (p < 1) requestAnimationFrame(tick);
+      else el.textContent = target.toString();
+    }
+    requestAnimationFrame(tick);
+  }
+  var obs = new IntersectionObserver(function(entries) {
+    entries.forEach(function(e) {
+      if (e.isIntersecting && e.target.getAttribute('data-count')) {
+        animateCount(e.target); obs.unobserve(e.target);
+      }
+    });
+  }, {threshold: 0.5});
+  document.querySelectorAll('[data-count]').forEach(function(el) { obs.observe(el); });
+})();
+
+/* ── Animate trust bar on load ── */
+(function() {
+  var fill = document.querySelector('.profile-trust-fill');
+  if (fill) {
+    var target = fill.style.width;
+    fill.style.width = '0%';
+    setTimeout(function() {
+      fill.style.transition = 'width 1.2s cubic-bezier(0.16,1,0.3,1)';
+      fill.style.width = target;
+    }, 450);
+  }
+})();
 
 /* ── Scroll-hide navbar ───────────────────────────── */
 (function () {

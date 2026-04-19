@@ -203,14 +203,81 @@
 .deal-parties-arrow { color: var(--muted); font-size: 1rem; flex-shrink: 0; }
 .deal-id { font-size: 0.7rem; color: var(--muted); font-family: monospace; }
 
+/* ─── Stepper active dot pulse ────────────────────────────────────────────── */
+.stepper-step.active .stepper-dot {
+  animation: stepper-pulse 2s ease-in-out infinite;
+}
+@keyframes stepper-pulse {
+  0%, 100% { box-shadow: 0 2px 12px rgba(13,148,136,0.45); }
+  50%       { box-shadow: 0 2px 24px rgba(13,148,136,0.8), 0 0 0 6px rgba(13,148,136,0.12); }
+}
+
+/* Animated line fill — requires .stepper-line.done transition */
+.stepper-line { transition: background 0.6s cubic-bezier(0.4,0,0.2,1); }
+
+/* ─── Deal ID copy ────────────────────────────────────────────────────────── */
+.deal-id-row {
+  display: flex; align-items: center; gap: 8px;
+}
+.deal-id-copy {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 0.68rem; font-weight: 700;
+  padding: 3px 9px; border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer; font-family: inherit;
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+.deal-id-copy:hover { color: #14B8A6; border-color: rgba(13,148,136,0.4); background: rgba(13,148,136,0.06); }
+.deal-id-copy.copied { color: #14B8A6; border-color: rgba(13,148,136,0.4); background: rgba(13,148,136,0.1); }
+
+/* ─── Countdown timer card ────────────────────────────────────────────────── */
+.countdown-card {
+  display: flex; align-items: center; gap: 14px;
+  background: linear-gradient(135deg, rgba(250,204,21,0.08), rgba(251,113,133,0.05));
+  border: 1px solid rgba(250,204,21,0.25);
+  border-radius: 16px; padding: 14px 16px; margin-bottom: 16px;
+  position: relative; overflow: hidden;
+}
+.countdown-card::before {
+  content: "";
+  position: absolute; left: 0; top: 0; bottom: 0;
+  width: 3px; background: linear-gradient(180deg, #FACC15, #FB7185);
+}
+.countdown-icon { font-size: 1.5rem; flex-shrink: 0; }
+.countdown-body { flex: 1; }
+.countdown-label {
+  font-size: 0.65rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  color: #FACC15; margin-bottom: 3px;
+}
+.countdown-time {
+  font-size: 1.4rem; font-weight: 900;
+  letter-spacing: -0.04em; color: var(--text);
+  font-variant-numeric: tabular-nums; line-height: 1;
+}
+.countdown-sub {
+  font-size: 0.72rem; color: var(--muted); margin-top: 3px;
+}
+
 /* ─── Action cards ────────────────────────────────────────────────────────── */
 .action-area { display: flex; flex-direction: column; gap: 12px; }
 
 .action-card {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: 20px; padding: 20px;
+  animation: card-enter 0.4s cubic-bezier(0.16,1,0.3,1) both;
 }
 [data-theme="light"] .action-card { background: #fff; }
+
+.action-card:nth-child(2) { animation-delay: 0.07s; }
+.action-card:nth-child(3) { animation-delay: 0.14s; }
+
+@keyframes card-enter {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
 
 .action-card-warn {
   background: rgba(250,204,21,0.05);
@@ -225,3 +292,324 @@
   font-size: 0.82rem; color: var(--muted);
   line-height: 1.5; margin-bottom: 16px;
 }
+
+/* ─── File upload drop zone ───────────────────────────────────────────────── */
+.file-drop-zone {
+  position: relative;
+  border: 2px dashed var(--border);
+  border-radius: 14px;
+  padding: 28px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  background: rgba(255,255,255,0.02);
+  overflow: hidden;
+}
+.file-drop-zone:hover,
+.file-drop-zone.drag-over {
+  border-color: rgba(13,148,136,0.5);
+  background: rgba(13,148,136,0.04);
+}
+.file-drop-zone input[type="file"] {
+  position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+}
+.file-drop-icon { font-size: 1.8rem; margin-bottom: 8px; }
+.file-drop-text {
+  font-size: 0.82rem; font-weight: 600; color: var(--muted);
+}
+.file-drop-text span { color: #14B8A6; }
+.file-drop-hint { font-size: 0.72rem; color: var(--muted); margin-top: 4px; opacity: 0.7; }
+.file-preview-list {
+  display: flex; flex-direction: column; gap: 6px; margin-top: 12px;
+}
+.file-preview-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; border-radius: 10px;
+  background: rgba(13,148,136,0.07); border: 1px solid rgba(13,148,136,0.15);
+  font-size: 0.78rem; font-weight: 600; color: var(--text);
+  animation: card-enter 0.3s cubic-bezier(0.16,1,0.3,1) both;
+}
+.file-preview-icon { font-size: 1rem; flex-shrink: 0; }
+.file-preview-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.file-preview-size { font-size: 0.68rem; color: var(--muted); flex-shrink: 0; }
+
+/* ─── Live amount preview (new deal) ─────────────────────────────────────── */
+.amount-preview {
+  background: linear-gradient(135deg, rgba(13,148,136,0.08), rgba(64,224,255,0.04));
+  border: 1px solid rgba(13,148,136,0.18);
+  border-radius: 14px;
+  padding: 14px 18px;
+  margin-top: 10px;
+  display: flex; align-items: center; gap: 12px;
+  transition: opacity 0.3s;
+}
+.amount-preview.hidden { opacity: 0; pointer-events: none; }
+.amount-preview-label { font-size: 0.7rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+.amount-preview-val {
+  font-size: 1.5rem; font-weight: 900; letter-spacing: -0.03em;
+  background: var(--grad-hero);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text; line-height: 1;
+  transition: transform 0.15s cubic-bezier(0.34,1.56,0.64,1);
+}
+.amount-preview-val.pop { transform: scale(1.08); }
+
+/* ─── Security checklist (new deal step 2) ────────────────────────────────── */
+.security-checklist {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 14px; border-radius: 14px;
+  background: rgba(13,148,136,0.05); border: 1px solid rgba(13,148,136,0.12);
+  margin-top: 16px;
+}
+.security-checklist-title {
+  font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--muted); margin-bottom: 4px;
+}
+.check-item {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 0.78rem; color: var(--muted);
+  transition: color 0.3s;
+}
+.check-item.done { color: #14B8A6; }
+.check-dot {
+  width: 16px; height: 16px; border-radius: 50%; flex-shrink: 0;
+  border: 2px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.55rem; font-weight: 900; color: transparent;
+  transition: background 0.3s, border-color 0.3s, color 0.3s;
+}
+.check-item.done .check-dot {
+  background: rgba(13,148,136,0.2); border-color: rgba(13,148,136,0.5);
+  color: #14B8A6;
+}
+
+/* ─── Slide panel animation ───────────────────────────────────────────────── */
+.deal-step-panel {
+  animation: panel-enter 0.35s cubic-bezier(0.16,1,0.3,1) both;
+}
+@keyframes panel-enter {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ─── Security tier badges ────────────────────────────────────────────────── */
+.tier-badge {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 8px 12px; border-radius: 10px; font-size: 0.78rem; font-weight: 700;
+  margin: 8px 0 4px; letter-spacing: 0.01em;
+}
+.tier-badge-desc {
+  font-weight: 400; opacity: 0.8; font-size: 0.74rem;
+}
+.tier-standard {
+  background: rgba(13,148,136,0.1); color: #14B8A6;
+  border: 1px solid rgba(13,148,136,0.25);
+}
+.tier-enhanced {
+  background: rgba(99,102,241,0.1); color: #818CF8;
+  border: 1px solid rgba(99,102,241,0.25);
+}
+.tier-highvalue {
+  background: rgba(245,158,11,0.1); color: #F59E0B;
+  border: 1px solid rgba(245,158,11,0.3);
+}
+
+/* ─── High-value deal warning card ───────────────────────────────────────── */
+.action-card-tier3 {
+  background: rgba(245,158,11,0.07);
+  border: 1px solid rgba(245,158,11,0.25);
+  border-radius: 16px; padding: 18px;
+}
+.action-card-tier3 .action-card-title { color: #F59E0B; }
+
+/* ─── Activity feed ───────────────────────────────────────────────────────── */
+.activity-section {
+  margin-top: 24px;
+  border-radius: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.activity-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.activity-header-left { display: flex; align-items: center; gap: 8px; }
+.activity-header-title { font-weight: 700; font-size: 0.9rem; }
+.activity-header-sub { font-size: 0.72rem; color: var(--muted); }
+
+/* Pulsing green dot — "live" indicator */
+.activity-pulse-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 0 rgba(34,197,94,0.5);
+  animation: pulse-live 2s infinite;
+}
+@keyframes pulse-live {
+  0%   { box-shadow: 0 0 0 0   rgba(34,197,94,0.5); }
+  70%  { box-shadow: 0 0 0 8px rgba(34,197,94,0);   }
+  100% { box-shadow: 0 0 0 0   rgba(34,197,94,0);   }
+}
+
+/* Feed container */
+.activity-feed { padding: 4px 0 8px; min-height: 80px; }
+
+/* Individual event row */
+.activity-list { display: flex; flex-direction: column; }
+.activity-item {
+  display: flex; gap: 14px; padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  animation: activity-enter 0.4s cubic-bezier(0.16,1,0.3,1) both;
+  position: relative;
+}
+.activity-item:last-child { border-bottom: none; }
+
+@keyframes activity-enter {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Icon dot */
+.activity-dot {
+  flex-shrink: 0;
+  width: 36px; height: 36px; border-radius: 50%;
+  background: var(--surface-2, rgba(255,255,255,0.05));
+  border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1rem;
+  margin-top: 2px;
+}
+
+/* Text */
+.activity-body { flex: 1; min-width: 0; }
+.activity-title { font-weight: 700; font-size: 0.85rem; margin-bottom: 2px; }
+.activity-desc  { font-size: 0.78rem; color: var(--muted); line-height: 1.4; margin-bottom: 4px; }
+.activity-time  { font-size: 0.7rem; color: var(--muted); opacity: 0.7; }
+
+/* Empty state */
+.activity-empty {
+  padding: 24px 20px; text-align: center;
+  font-size: 0.82rem; color: var(--muted);
+}
+
+/* Loading skeleton */
+.activity-skeleton { padding: 12px 20px; display: flex; flex-direction: column; gap: 12px; }
+.activity-skeleton-row {
+  height: 44px; border-radius: 10px;
+  background: linear-gradient(90deg, var(--border) 25%, rgba(255,255,255,0.04) 50%, var(--border) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+}
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Vertical connector line between events */
+.activity-item::before {
+  content: '';
+  position: absolute;
+  left: 37px; top: 52px;
+  width: 2px;
+  height: calc(100% - 38px);
+  background: var(--border);
+}
+.activity-item:last-child::before { display: none; }
+
+/* ─── Protection plan picker ──────────────────────────────────────────────── */
+.plan-grid {
+  display: flex; flex-direction: column; gap: 12px;
+  margin-bottom: 20px;
+}
+
+.plan-card {
+  border: 2px solid var(--border);
+  border-radius: 16px; padding: 16px;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s, transform 0.15s;
+  position: relative; overflow: hidden;
+}
+.plan-card:active { transform: scale(0.98); }
+.plan-card.plan-recommended {
+  border-color: rgba(99,102,241,0.4);
+  background: rgba(99,102,241,0.04);
+}
+.plan-card.plan-recommended::before {
+  content: "Recommended";
+  position: absolute; top: 10px; right: 12px;
+  font-size: 0.65rem; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  color: #818CF8; background: rgba(99,102,241,0.12);
+  padding: 2px 8px; border-radius: 999px;
+}
+.plan-card.plan-selected {
+  border-color: var(--jade-light);
+  background: rgba(13,148,136,0.06);
+}
+
+.plan-card-header {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 6px;
+}
+.plan-icon   { font-size: 1.4rem; flex-shrink: 0; }
+.plan-name   { font-weight: 800; font-size: 1rem; flex: 1; }
+.plan-fee-badge {
+  font-size: 0.72rem; font-weight: 700; padding: 3px 10px;
+  border-radius: 999px; white-space: nowrap;
+}
+.plan-fee-free { background: rgba(34,197,94,0.12); color: #22c55e; }
+.plan-fee-paid { background: rgba(251,191,36,0.15); color: #F59E0B; }
+
+.plan-tagline {
+  font-size: 0.78rem; color: var(--muted); margin-bottom: 10px;
+  line-height: 1.4;
+}
+.plan-perks { display: flex; flex-direction: column; gap: 5px; }
+.plan-perk  { display: flex; gap: 8px; font-size: 0.78rem; align-items: flex-start; }
+.plan-perk-check { color: var(--jade-light); font-weight: 800; flex-shrink: 0; margin-top: 1px; }
+
+.plan-select-indicator {
+  display: none; margin-top: 10px;
+  font-size: 0.8rem; font-weight: 700; color: var(--jade-light);
+}
+.plan-card.plan-selected .plan-select-indicator { display: block; }
+
+/* ─── Fee summary breakdown ───────────────────────────────────────────────── */
+.plan-summary {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px; padding: 14px 16px;
+  margin-bottom: 4px;
+  animation: plan-summary-enter 0.3s ease both;
+}
+.plan-summary.hidden { display: none; }
+@keyframes plan-summary-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.plan-summary-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 5px 0; font-size: 0.83rem;
+}
+.plan-summary-label { color: var(--muted); }
+.plan-summary-val   { font-weight: 600; }
+.plan-summary-fee   { color: #F59E0B; }
+.plan-summary-total {
+  border-top: 1px solid var(--border); margin-top: 6px; padding-top: 10px;
+  font-weight: 800; font-size: 0.95rem;
+}
+
+/* ─── Deal fee breakdown (in deal detail card) ─────────────────────────────── */
+.deal-fee-breakdown {
+  margin: 8px 0 0; padding: 10px 0 0;
+  border-top: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 4px;
+}
+.deal-fee-row {
+  display: flex; justify-content: space-between;
+  font-size: 0.77rem;
+}
+.deal-fee-label { color: var(--muted); }
+.deal-fee-val   { font-weight: 600; }
+.deal-fee-service { color: #F59E0B; }

@@ -28,6 +28,7 @@ class UserProfile(BaseModel):
     kyc_status: KYCStatus = KYCStatus.UNVERIFIED
     total_transactions: int = 0
     scam_reports: int = 0
+    pin_hash: str | None = None
 
     @field_validator("trust_score")
     @classmethod

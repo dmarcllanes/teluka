@@ -347,6 +347,7 @@ def otp_step(masked_email: str, email: str, error: str | None = None, _phone: st
                             maxlength="1",
                             cls="otp-input",
                             id=f"otp-{i}",
+                            name=f"otp-{i}",
                             inputmode="numeric",
                             autocomplete="one-time-code" if i == 0 else "off",
                             pattern="[0-9]",

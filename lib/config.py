@@ -49,6 +49,18 @@ class Config:
                 "will raise errors at runtime. Set MOCK_PAYMENTS=true to bypass."
             )
 
+        # ── Mock uploads (EXIF check + Supabase Storage) ──────────────────────
+        # When MOCK_PAYMENTS=true, uploads are also mocked by default so the
+        # entire deal flow works end-to-end without any real credentials.
+        # Override with MOCK_UPLOADS=false to test real uploads with mock payments.
+        _mock_uploads_raw = _optional("MOCK_UPLOADS", "").lower()
+        if _mock_uploads_raw in ("1", "true", "yes"):
+            self.mock_uploads: bool = True
+        elif _mock_uploads_raw in ("0", "false", "no"):
+            self.mock_uploads = False
+        else:
+            self.mock_uploads = self.mock_payments  # inherit from mock_payments
+
         # ── SMS ───────────────────────────────────────────────────────────────
         self.sms_provider: str       = _optional("SMS_PROVIDER", "semaphore")
         # Semaphore (PH-native)
@@ -64,6 +76,9 @@ class Config:
         self.twilio_from: str        = _optional("TWILIO_FROM")
 
         # ── Email (OTP delivery) ──────────────────────────────────────────────
+        self.resend_api_key: str     = _optional("RESEND_API_KEY")
+        self.email_from: str         = _optional("EMAIL_FROM", "Teluka <onboarding@resend.dev>")
+        # Legacy Gmail (kept for local dev fallback)
         self.gmail_user: str         = _optional("GMAIL_USER")
         self.gmail_app_password: str = _optional("GMAIL_APP_PASSWORD")
 

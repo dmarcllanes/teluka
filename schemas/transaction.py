@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Optional
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class TransactionStatus(StrEnum):
@@ -23,14 +23,21 @@ class Transaction(BaseModel):
     buyer_id: str
     seller_id: str
     item_description: str
-    amount_centavos: int          # e.g. ₱1,000 = 100_000
+    amount_centavos: int           # item price, e.g. ₱1,000 = 100_000
+    platform_fee_centavos: int = 0 # Teluka service fee
+    protection_plan: str = "basic" # "basic" | "standard" | "premium"
     status: TransactionStatus = TransactionStatus.PENDING
     payment_intent_id: Optional[str] = None
-    evidence_photo_urls: list[str] = []
+    evidence_photo_urls: list[str] = Field(default_factory=list)
     unboxing_video_url: Optional[str] = None
     delivery_tracking_id: Optional[str] = None
-    created_at: datetime = datetime.now()
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: Optional[datetime] = None
     expires_at: Optional[datetime] = None  # Asia/Manila timezone
+
+    @property
+    def total_centavos(self) -> int:
+        return self.amount_centavos + self.platform_fee_centavos
 
     @field_validator("amount_centavos")
     @classmethod
@@ -45,6 +52,8 @@ class CreateTransactionRequest(BaseModel):
     seller_id: str
     item_description: str
     amount_centavos: int
+    protection_plan: str = "basic"
+    platform_fee_centavos: int = 0
 
     @field_validator("amount_centavos")
     @classmethod

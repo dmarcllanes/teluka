@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 from lib.config import get_config  # noqa: E402  (import after logging setup)
 cfg = get_config()
 
+from datetime import datetime as _dt
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.staticfiles import StaticFiles
@@ -41,11 +42,13 @@ from lib.storage import upload_evidence_photo, upload_unboxing_video
 from core.escrow import cancel_escrow, initiate_escrow, release_escrow
 from core.exceptions import ScamDetected, VerificationFailed
 from core.forensics import analyze_risk
-from core.verification import verify_photo_exif
+from core.verification import verify_photo_liveness, check_evidence_complete, check_release_gate
+from core.tiers import get_tier, get_plan, PLANS
 from lib.phone import normalize_ph_phone, PhoneValidationError
 from lib.session import get_session_user, set_session_user, clear_session
 from lib.middleware import apply_middleware
 from lib.supabase_client import get_supabase_admin
+from lib.activity import log_event, get_events, format_relative_time
 from schemas.transaction import CreateTransactionRequest, Transaction, TransactionStatus
 from schemas.user import UserProfile
 
@@ -208,9 +211,17 @@ async def post(email: str):
 
 
 @rt("/verify-otp")
-async def post(email: str, otp: str, session, phone: str = ""):
+async def post(request: Request, session):
     """Verify OTP, create/load user, set session."""
-    clean_otp = otp.strip()
+    form  = await request.form()
+    email = form.get("email", "").strip()
+    phone = form.get("phone", "").strip()
+    # Assemble from named digit fields first (avoids JS autocomplete race on mobile)
+    digits = "".join(form.get(f"otp-{i}", "") for i in range(6)).strip()
+    clean_otp = digits if len(digits) == 6 else form.get("otp", "").strip()
+
+    if not email:
+        return Div(Div("Session error — please start over.", cls="toast toast-error"))
     if not clean_otp.isdigit() or len(clean_otp) != 6:
         return Div(Div("Please enter the 6-digit code from your email.", cls="toast toast-error"))
 
@@ -430,16 +441,23 @@ def get(session):
 
 
 @rt("/transactions/create")
-async def post(item_description: str, amount_php: float, seller_id: str, session):
+async def post(item_description: str, amount_php: float, seller_id: str, session,
+               protection_plan: str = "basic"):
     buyer_id = get_session_user(session)
     if not buyer_id:
         return Div(Div("Session expired.", cls="toast toast-error"))
+
+    amount_centavos = int(float(amount_php) * 100)
+    plan = get_plan(protection_plan) if protection_plan in PLANS else get_tier(amount_centavos)
+    fee  = plan.fee_centavos(amount_centavos)
 
     req = CreateTransactionRequest(
         buyer_id=buyer_id,
         seller_id=seller_id,
         item_description=item_description,
-        amount_centavos=int(float(amount_php) * 100),
+        amount_centavos=amount_centavos,
+        protection_plan=plan.id,
+        platform_fee_centavos=fee,
     )
 
     supabase = await get_supabase_admin()
@@ -447,6 +465,14 @@ async def post(item_description: str, amount_php: float, seller_id: str, session
         await supabase.table("transactions").insert(req.model_dump()).execute()
     ).data[0]
     tx_id = row["id"]
+
+    await log_event(tx_id, "deal_created",
+        f'Deal for \"{item_description}\" created \u00b7 \u20b1{amount_centavos / 100:,.0f}',
+        actor_id=buyer_id)
+    await log_event(tx_id, "tier_upgraded",
+        f"{plan.badge_icon} {plan.name} protection active \u00b7 {plan.min_photos} photos, {plan.review_hours}h review"
+        + (f" \u00b7 Service fee: \u20b1{fee / 100:,.2f}" if fee else " \u00b7 No service fee"),
+        icon=plan.badge_icon)
 
     logger.info("Transaction created tx=%s buyer=%s", tx_id, buyer_id)
     return Div(
@@ -497,8 +523,12 @@ async def post(tx_id: str, session):
     if not row:
         return Div(Div("Deal not found.", cls="toast toast-error"))
     tx = Transaction(**row)
+    user_id = get_session_user(session)
     try:
         await initiate_escrow(tx)
+        await log_event(tx_id, "payment_held",
+            f"₱{tx.amount_centavos / 100:,.0f} held securely — seller cannot access funds until you confirm",
+            actor_id=user_id)
         return Div(
             Div("Funds held securely!", cls="toast toast-success"),
             Script("setTimeout(() => location.reload(), 1200);"),
@@ -533,30 +563,39 @@ async def post(request: Request, session):
         return Div(Div("Deal not found.", cls="toast toast-error"))
     tx = Transaction(**row)
 
-    urls: list[str] = []
+    new_urls: list[str] = []
     for photo_file in valid_files:
         file_bytes = await photo_file.read()
         if len(file_bytes) > 10 * 1024 * 1024:
             return Div(Div(f"Photo '{photo_file.filename}' exceeds 10 MB limit.", cls="toast toast-error"))
-        try:
-            verify_photo_exif(file_bytes, tx.created_at)
-        except VerificationFailed as e:
-            return Div(Div(f"Photo rejected: {e}", cls="toast toast-error"))
+        if not cfg.mock_uploads:
+            try:
+                result = verify_photo_liveness(file_bytes, tx.created_at, tx.amount_centavos)
+                logger.info("Liveness OK tx=%s file=%s score=%d", tx_id, photo_file.filename, result.score)
+            except VerificationFailed as e:
+                return Div(Div(f"Photo rejected: {e}", cls="toast toast-error"))
         try:
             url = await upload_evidence_photo(file_bytes, photo_file.filename, tx_id)
-            urls.append(url)
+            new_urls.append(url)
         except ValueError as e:
             return Div(Div(str(e), cls="toast toast-error"))
         except Exception as e:
             logger.exception("Evidence upload failed tx=%s", tx_id)
             return Div(Div(f"Upload failed: {e}", cls="toast toast-error"))
 
+    all_urls = tx.evidence_photo_urls + new_urls
+
     await supabase.table("transactions").update({
-        "evidence_photo_urls": urls,
+        "evidence_photo_urls": all_urls,
         "status": TransactionStatus.EVIDENCE_SUBMITTED,
+        "updated_at": _dt.utcnow().isoformat(),
     }).eq("id", tx_id).execute()
 
-    logger.info("Evidence submitted tx=%s photos=%d", tx_id, len(urls))
+    user_id = get_session_user(session)
+    await log_event(tx_id, "evidence_submitted",
+        f"{len(new_urls)} photo(s) uploaded · {len(all_urls)} total — liveness verified ✓",
+        actor_id=user_id)
+    logger.info("Evidence submitted tx=%s photos=%d", tx_id, len(all_urls))
     return Div(
         Div("Evidence submitted!", cls="toast toast-success"),
         Script("setTimeout(() => location.reload(), 1200);"),
@@ -590,12 +629,18 @@ async def post(request: Request, session):
         logger.exception("Unboxing upload failed tx=%s", tx_id)
         return Div(Div(f"Upload failed: {e}", cls="toast toast-error"))
 
+
     supabase = await get_supabase_admin()
     await supabase.table("transactions").update({
         "unboxing_video_url": url,
         "status": TransactionStatus.UNBOXING_UPLOADED,
+        "updated_at": _dt.utcnow().isoformat(),
     }).eq("id", tx_id).execute()
 
+    user_id = get_session_user(session)
+    await log_event(tx_id, "unboxing_uploaded",
+        "Unboxing video recorded — buyer can now release payment to seller",
+        actor_id=user_id)
     logger.info("Unboxing video uploaded tx=%s", tx_id)
     return Div(
         Div("Video uploaded! You can now release the payment.", cls="toast toast-success"),
@@ -612,6 +657,10 @@ async def post(tx_id: str, tracking_id: str, session):
         "delivery_tracking_id": tracking_id,
         "status": TransactionStatus.IN_TRANSIT,
     }).eq("id", tx_id).execute()
+    user_id = get_session_user(session)
+    await log_event(tx_id, "item_shipped",
+        f"Item shipped · Tracking: {tracking_id}",
+        actor_id=user_id)
     logger.info("Shipment added tx=%s tracking=%s", tx_id, tracking_id)
     return Div(
         Div("Marked as shipped!", cls="toast toast-success"),
@@ -620,10 +669,29 @@ async def post(tx_id: str, tracking_id: str, session):
 
 
 @rt("/transactions/release")
-async def post(tx_id: str, session):
-    if not get_session_user(session):
+async def post(request: Request, session):
+    user_id = get_session_user(session)
+    if not user_id:
         return Div(Div("Session expired.", cls="toast toast-error"))
+
+    form  = await request.form()
+    tx_id = form.get("tx_id", "").strip()
+    # Collect PIN from named digit fields (primary) or single field (fallback)
+    pin_digits = "".join(form.get(f"pin-{i}", "") for i in range(4)).strip()
+    pin = pin_digits if len(pin_digits) == 4 else form.get("pin", "").strip()
+
     supabase = await get_supabase_admin()
+
+    # Verify PIN if the user has one set
+    user_row = (
+        await supabase.table("users").select("pin_hash").eq("id", user_id).single().execute()
+    ).data
+    if user_row and user_row.get("pin_hash"):
+        if not pin:
+            return Div(Div("Please enter your PIN to confirm this action.", cls="toast toast-error"))
+        if not verify_pin(pin, user_row["pin_hash"]):
+            return Div(Div("Incorrect PIN. Please try again.", cls="toast toast-error"))
+
     row = (
         await supabase.table("transactions").select("*").eq("id", tx_id).single().execute()
     ).data
@@ -631,7 +699,19 @@ async def post(tx_id: str, session):
         return Div(Div("Deal not found.", cls="toast toast-error"))
     tx = Transaction(**row)
     try:
+        check_release_gate(
+            tx.evidence_photo_urls,
+            tx.unboxing_video_url,
+            tx.delivery_tracking_id,
+            tx.amount_centavos,
+        )
+    except VerificationFailed as e:
+        return Div(Div(str(e), cls="toast toast-error"))
+    try:
         await release_escrow(tx)
+        await log_event(tx_id, "payment_released",
+            f"₱{tx.amount_centavos / 100:,.0f} released to seller — deal complete",
+            actor_id=user_id)
         return Div(
             Div("Payment released to seller!", cls="toast toast-success"),
             Script("setTimeout(() => location.reload(), 1200);"),
@@ -649,6 +729,10 @@ async def post(tx_id: str, reason: str, session):
     await supabase.table("transactions").update({
         "status": TransactionStatus.DISPUTED,
     }).eq("id", tx_id).execute()
+    user_id = get_session_user(session)
+    await log_event(tx_id, "dispute_raised",
+        f'Dispute opened: \"{reason[:120]}\" — evidence under review',
+        actor_id=user_id)
     logger.info("Dispute raised tx=%s reason=%r", tx_id, reason[:100])
     return Div(
         Div("Dispute raised. Our team will review the evidence.", cls="toast toast-warn"),
@@ -667,8 +751,12 @@ async def post(tx_id: str, session):
     if not row:
         return Div(Div("Deal not found.", cls="toast toast-error"))
     tx = Transaction(**row)
+    user_id = get_session_user(session)
     try:
         await cancel_escrow(tx)
+        event_type = "deal_refunded" if tx.payment_intent_id else "deal_cancelled"
+        desc = "Funds refunded to buyer" if tx.payment_intent_id else "Deal cancelled before payment"
+        await log_event(tx_id, event_type, desc, actor_id=user_id)
         return Div(
             Div("Deal cancelled.", cls="toast toast-warn"),
             Script("setTimeout(() => { window.location.href = '/dashboard'; }, 1200);"),
@@ -676,6 +764,49 @@ async def post(tx_id: str, session):
     except Exception as e:
         logger.exception("cancel_escrow failed tx=%s", tx_id)
         return Div(Div(f"Cancellation failed: {e}", cls="toast toast-error"))
+
+
+# ---------------------------------------------------------------------------
+# Activity feed (HTMX polling)
+# ---------------------------------------------------------------------------
+
+@rt("/transactions/{tx_id}/activity")
+async def get(tx_id: str, session):
+    """Returns the activity timeline fragment — polled every 4s by HTMX."""
+    user_id = get_session_user(session)
+    if not user_id:
+        return Div()
+
+    # Security: only buyer/seller may view
+    supabase = await get_supabase_admin()
+    row = (
+        await supabase.table("transactions")
+        .select("buyer_id,seller_id")
+        .eq("id", tx_id)
+        .single()
+        .execute()
+    ).data
+    if not row or user_id not in (row["buyer_id"], row["seller_id"]):
+        return Div()
+
+    events = await get_events(tx_id)
+    if not events:
+        return Div(cls="activity-empty")("No activity yet.")
+
+    items = []
+    for ev in events:
+        rel = format_relative_time(ev["created_at"])
+        items.append(
+            Div(cls="activity-item")(
+                Div(cls="activity-dot")(ev["icon"]),
+                Div(cls="activity-body")(
+                    Div(cls="activity-title")(ev["title"]),
+                    Div(cls="activity-desc")(ev["description"]),
+                    Div(cls="activity-time")(rel),
+                ),
+            )
+        )
+    return Div(cls="activity-list")(*items)
 
 
 # ---------------------------------------------------------------------------

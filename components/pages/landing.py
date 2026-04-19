@@ -52,8 +52,8 @@ def _head() -> FT:
 
 def _top_banner() -> FT:
     ticks = (
-        "🔒 Escrow-protected  ·  📸 EXIF live photo  ·  🤖 AI scam detection  ·  "
-        "⚡ GCash & Maya  ·  ⚖️ Dispute Resolution  ·  🪪 KYC verified  ·  "
+        "🔒 Your money is held safe  ·  📸 Real photos required  ·  🤖 Scam alerts  ·  "
+        "⚡ GCash & Maya  ·  ⚖️ We settle disputes fairly  ·  ✅ Verified sellers  ·  "
         "🇵🇭 Built for the Philippines  ·  "
     )
     return Div(cls="top-banner", id="top-banner")(
@@ -186,9 +186,8 @@ def _hero() -> FT:
                 Span("Marketplace.", cls="word-swap"),
             ),
             P(
-                "Teluka wraps every buy-and-sell deal in escrow, "
-                "live photo verification, and AI-powered scam detection. "
-                "Your money moves only when you say it does.",
+                "Teluka holds your money safely until you're happy with what you received. "
+                "The seller only gets paid after you confirm the item is exactly as described.",
                 cls="hero-desc",
             ),
             Div(cls="hero-actions")(
@@ -236,7 +235,7 @@ def _phone_mockup() -> FT:
                     Div("₱45,000", cls="mock-tx-amt"),
                     Div(cls="mock-tx-status")(
                         Div(cls="status-dot"),
-                        Span("Funds Held in Escrow"),
+                        Span("Money Held Safely 🔒"),
                     ),
                 ),
                 Div(cls="mock-steps")(
@@ -250,14 +249,14 @@ def _phone_mockup() -> FT:
                     Div(cls="mock-step-line todo"),
                     Div(cls="mock-step-dot todo")("5"),
                 ),
-                _mini_detail_card("📦", "Delivery", "Lalamove • In Transit", "#06b6d4"),
-                _mini_detail_card("📸", "Evidence", "3/3 photos verified", "#10b981"),
+                _mini_detail_card("📸", "Photos", "3/3 real photos checked ✓", "#10b981"),
+                _mini_detail_card("⏳", "Status", "Waiting for your review", "#06b6d4"),
             ),
         ),
         # Floating badges
-        Div(cls="phone-badge pb-1")(Div(cls="phone-badge-dot dot-green"), "EXIF Verified ✓"),
-        Div(cls="phone-badge pb-2")(Div(cls="phone-badge-dot dot-violet"), "Escrow Active 🔒"),
-        Div(cls="phone-badge pb-3")(Div(cls="phone-badge-dot dot-cyan"), "Scam Score: Low"),
+        Div(cls="phone-badge pb-1")(Div(cls="phone-badge-dot dot-green"), "Photo Verified ✓"),
+        Div(cls="phone-badge pb-2")(Div(cls="phone-badge-dot dot-violet"), "Money Held Safe 🔒"),
+        Div(cls="phone-badge pb-3")(Div(cls="phone-badge-dot dot-cyan"), "Scam Risk: Low"),
         Div(cls="phone-shadow"),
     )
 
@@ -282,16 +281,16 @@ def _mini_detail_card(icon: str, label: str, value: str, color: str) -> FT:
 
 def _marquee() -> FT:
     items = [
-        ("md-violet", "🔒", "GCash & Maya Payments"),
-        ("md-green",  "🛡️", "Escrow Protection"),
-        ("md-cyan",   "📸", "EXIF Photo Verification"),
-        ("md-pink",   "🎥", "Unboxing Video Gate"),
-        ("md-violet", "🤖", "AI Scam Detection"),
-        ("md-green",  "⚖️", "Dispute Resolution"),
-        ("md-cyan",   "⚡", "Instant Payouts"),
-        ("md-pink",   "💳", "PayMongo Integration"),
-        ("md-violet", "🪪", "KYC Verified Users"),
-        ("md-green",  "✅", "Zero Bait & Switch"),
+        ("md-violet", "🔒", "Money Held Safe"),
+        ("md-green",  "🛡️", "No Bait & Switch"),
+        ("md-cyan",   "📸", "Real Photos Required"),
+        ("md-pink",   "🎥", "Video Proof on Delivery"),
+        ("md-violet", "🤖", "Scam Alerts"),
+        ("md-green",  "⚖️", "Fair Dispute Resolution"),
+        ("md-cyan",   "⚡", "Instant GCash & Maya"),
+        ("md-pink",   "✅", "Verified Sellers Only"),
+        ("md-violet", "🇵🇭", "Made for Filipinos"),
+        ("md-green",  "🆓", "Free to Start"),
     ]
 
     def item(dot_cls: str, emoji: str, text: str) -> FT:
@@ -303,7 +302,7 @@ def _marquee() -> FT:
 
     all_items = [item(d, e, t) for d, e, t in items] * 3
     return Div(cls="marquee-section")(
-        Div(cls="marquee-label")("POWERED BY"),
+        Div(cls="marquee-label")("EVERYTHING YOU GET"),
         Div(cls="marquee-wrap")(
             Div(cls="marquee-track")(*all_items),
         ),
@@ -319,9 +318,9 @@ def _marquee() -> FT:
 
 def _stats() -> FT:
     stats = [
-        ("₱12M+",  "12000000", "₱", "+", "Protected in Escrow",  "🔐", "md-violet"),
+        ("₱12M+",  "12000000", "₱", "+", "Kept Safe for Buyers", "🔐", "md-violet"),
         ("847",    "847",      "",  "",  "Scams Blocked",         "🛡️",  "md-pink"),
-        ("2,400+", "2400",     "",  "+", "Verified Users",        "🪪",  "md-green"),
+        ("2,400+", "2400",     "",  "+", "Happy Users",           "😊",  "md-green"),
     ]
     cells = []
     for num, count, prefix, suffix, label, icon, dot in stats:
@@ -352,9 +351,9 @@ def _features_bento() -> FT:
     return Section(cls="lsection", id="features")(
         Div(cls="lsection-hd reveal")(
             Div("Why Teluka?", cls="lsection-eye"),
-            H2("Every layer of protection", cls="lsection-title"),
+            H2("We protect you at every step", cls="lsection-title"),
             P(
-                "We built the security stack Facebook Marketplace never had.",
+                "So you never have to worry about losing your money again.",
                 cls="lsection-sub",
             ),
         ),
@@ -380,18 +379,18 @@ def _bento_escrow_flow() -> FT:
             style="width:300px;height:300px;background:radial-gradient(circle,rgba(124,58,237,0.15) 0%,transparent 70%);top:-80px;right:-40px",
         ),
         Div(cls="bento-icon bi-violet")("🔒"),
-        H3("Escrow Protection", cls="bento-title"),
+        H3("Your money is safe until you're happy", cls="bento-title"),
         P(
-            "Funds are locked with PayMongo — never transferred directly. "
-            "Money moves only when all 5 conditions are verified.",
+            "When you pay, the money is held — not given to the seller. "
+            "It only gets released after you confirm you got what you paid for.",
             cls="bento-desc",
         ),
         Div(cls="bento-flow")(
-            Div(cls="flow-node")(Div("₱", cls="flow-dot fd-done"), Div("Paid", cls="flow-label")),
+            Div(cls="flow-node")(Div("₱", cls="flow-dot fd-done"), Div("You Pay", cls="flow-label")),
             Div(cls="flow-line")(Div(cls="flow-line-fill")),
             Div(cls="flow-node")(Div("🔒", cls="flow-dot fd-active"), Div("Held", cls="flow-label")),
             Div(cls="flow-line")(Div(cls="flow-line-fill")),
-            Div(cls="flow-node")(Div("📸", cls="flow-dot fd-done"), Div("Evidence", cls="flow-label")),
+            Div(cls="flow-node")(Div("📸", cls="flow-dot fd-done"), Div("Proof", cls="flow-label")),
             Div(cls="flow-line"),
             Div(cls="flow-node")(Div("⚖️", cls="flow-dot fd-next"), Div("Review", cls="flow-label")),
             Div(cls="flow-line"),
@@ -403,18 +402,18 @@ def _bento_escrow_flow() -> FT:
 def _bento_risk() -> FT:
     return Div(cls="bento-cell bento-c reveal reveal-delay-1", data_tilt="true")(
         Div(cls="bento-icon bi-pink")("🧠"),
-        H3("AI Scam Detection", cls="bento-title"),
-        P("Every transaction is scored against blacklisted numbers and fraud patterns before a single peso moves.", cls="bento-desc"),
+        H3("We spot scammers before they spot you", cls="bento-title"),
+        P("Every deal is automatically checked against known scammers. If something looks suspicious, we warn you before any money moves.", cls="bento-desc"),
         Div(cls="bento-big-stat")("0.3s"),
-        P("avg. risk check time", style="font-size:0.75rem;color:rgba(255,255,255,0.3);margin-top:4px"),
+        P("avg. check time per deal", style="font-size:0.75rem;color:rgba(255,255,255,0.3);margin-top:4px"),
     )
 
 
 def _bento_exif() -> FT:
     return Div(cls="bento-cell bento-c reveal reveal-delay-1", data_tilt="true")(
         Div(cls="bento-icon bi-cyan")("📸"),
-        H3("Live Photo Verification", cls="bento-title"),
-        P("EXIF metadata is checked against the transaction timestamp. Photos older than 24h are automatically rejected.", cls="bento-desc"),
+        H3("Proof the item is real — not a stock photo", cls="bento-title"),
+        P("Sellers must upload a fresh photo of the actual item. If the photo was taken more than 24 hours ago, it's automatically rejected.", cls="bento-desc"),
     )
 
 
@@ -426,10 +425,10 @@ def _bento_dispute() -> FT:
     ]
     return Div(cls="bento-cell bento-c reveal reveal-delay-2", data_tilt="true")(
         Div(cls="bento-icon bi-blue")("⚖️"),
-        H3("Dispute Resolution", cls="bento-title"),
+        H3("Something wrong? We settle it fairly", cls="bento-title"),
         P(
-            "48-hour buyer inspection window. Raise evidence, Teluka arbitrates. "
-            "Funds never move until both sides are heard.",
+            "You have 48 hours to check what you received. "
+            "Not what you expected? Tell us. We listen to both sides before any money moves.",
             cls="bento-desc",
         ),
         Div(cls="dispute-verdicts")(
@@ -450,8 +449,8 @@ def _bento_dispute() -> FT:
 def _bento_unboxing() -> FT:
     return Div(cls="bento-cell bento-c reveal reveal-delay-3", data_tilt="true")(
         Div(cls="bento-icon bi-amber")("🎥"),
-        H3("Unboxing Gate", cls="bento-title"),
-        P("Buyers must upload an unboxing video before payment is released. The final defense against bait-and-switch.", cls="bento-desc"),
+        H3("Record opening it — just to be sure", cls="bento-title"),
+        P("Before payment is released, you simply record a short video of yourself opening the package. This one step stops bait-and-switch scams completely.", cls="bento-desc"),
     )
 
 
@@ -462,16 +461,16 @@ def _bento_payments() -> FT:
             style="width:250px;height:250px;background:radial-gradient(circle,rgba(6,182,212,0.12) 0%,transparent 70%);bottom:-40px;right:20px",
         ),
         Div(cls="bento-icon bi-green")("⚡"),
-        H3("Instant GCash & Maya", cls="bento-title"),
+        H3("Pay with GCash or Maya — you already have them", cls="bento-title"),
         P(
-            "The wallets 9 out of 10 Filipinos already use. No bank account needed — "
-            "pay and get paid in centavos with zero friction.",
+            "No need to set up anything new. Use the wallet you already have. "
+            "Sellers get paid instantly once the deal is confirmed — no bank account needed.",
             cls="bento-desc",
         ),
         Div(style="display:flex;gap:12px;margin-top:20px;position:relative;z-index:1")(
             _wallet_chip("GCash", "#0061AF"),
             _wallet_chip("Maya", "#00C800"),
-            _wallet_chip("PayMongo", "#7c3aed"),
+            _wallet_chip("Instant Payout", "#7c3aed"),
         ),
     )
 
@@ -479,8 +478,8 @@ def _bento_payments() -> FT:
 def _bento_kyc() -> FT:
     return Div(cls="bento-cell bento-c reveal reveal-delay-1", data_tilt="true")(
         Div(cls="bento-icon bi-violet")("🪪"),
-        H3("KYC Verification", cls="bento-title"),
-        P("GCash and Maya-verified numbers get higher trust scores. Unverified sellers face stricter evidence requirements.", cls="bento-desc"),
+        H3("Only deal with people you can trust", cls="bento-title"),
+        P("Sellers verified through GCash or Maya earn a higher trust rating. The more deals completed without issues, the stronger the reputation.", cls="bento-desc"),
     )
 
 
@@ -499,16 +498,16 @@ def _wallet_chip(name: str, color: str) -> FT:
 
 def _how_it_works() -> FT:
     steps = [
-        ("Initiate", "Create a Transaction",
-         "Buyer locks in the item description and price. All terms are set — no last-minute changes possible."),
-        ("Escrow", "Pay into Escrow",
-         "Buyer pays via GCash or Maya. Funds are held by PayMongo, not the seller, until every condition is met."),
-        ("Verify", "Seller Submits Live Evidence",
-         "Seller uploads real-time photos. Teluka reads EXIF metadata and rejects anything older than 24 hours."),
-        ("Protect", "48-Hour Buyer Review Window",
-         "After evidence is submitted, the buyer has 48 hours to inspect and raise a dispute. If anything is wrong, Teluka arbitrates — funds never auto-release until the case is resolved."),
-        ("Release", "Unbox & Release Payment",
-         "Buyer records an unboxing video, confirms the item, and releases payment. Seller gets paid instantly."),
+        ("Agree", "Set the deal terms",
+         "Buyer and seller agree on the item and price inside Teluka. Everything is written down — no he-said-she-said."),
+        ("Pay", "Buyer pays — money is held, not sent",
+         "The buyer pays via GCash or Maya. The money goes into a safe hold — the seller doesn't receive it yet."),
+        ("Proof", "Seller shows the real item",
+         "The seller sends a fresh photo of the actual item, taken right now. Old or recycled photos are automatically rejected."),
+        ("Check", "Buyer has 48 hours to review",
+         "Once the seller sends proof, the buyer has 48 hours to inspect everything. Not happy? Raise a dispute and Teluka will look into it."),
+        ("Done", "Confirm and the seller gets paid",
+         "Buyer opens the package on video, confirms it's correct, and releases the payment. The seller gets paid right away."),
     ]
     step_items = [
         Div(cls=f"tl-item reveal reveal-delay-{i+1}")(
@@ -523,9 +522,9 @@ def _how_it_works() -> FT:
     ]
     return Section(cls="lsection", id="how")(
         Div(cls="lsection-hd reveal")(
-            Div("The Process", cls="lsection-eye"),
-            H2("Five layers. Zero scams.", cls="lsection-title"),
-            P("Every deal follows the same iron-clad flow.", cls="lsection-sub"),
+            Div("How It Works", cls="lsection-eye"),
+            H2("Simple, safe, step by step.", cls="lsection-title"),
+            P("Every deal follows the same clear process — no surprises, no stress.", cls="lsection-sub"),
         ),
         Div(cls="timeline")(*step_items),
     )

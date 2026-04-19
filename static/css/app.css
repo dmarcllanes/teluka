@@ -947,3 +947,119 @@ body::before {
   .auth-back-btn span { display: none; }  /* show only arrow on tiny screens */
   .imt-btn span { display: none; }         /* icon only on tiny screens */
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   GLOBAL INTERACTIVE MICRO-INTERACTIONS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Button press haptic ─────────────────────────────────────────────────── */
+.btn:active { transform: scale(0.97); }
+.btn-primary:active { box-shadow: 0 2px 8px rgba(13,148,136,0.3); }
+
+/* ─── Input jade focus glow ──────────────────────────────────────────────── */
+.form-input:focus {
+  outline: none;
+  border-color: rgba(13,148,136,0.6);
+  box-shadow: 0 0 0 3px rgba(13,148,136,0.12), 0 1px 4px rgba(0,0,0,0.2);
+}
+
+/* ─── Valid input state ───────────────────────────────────────────────────── */
+.input-icon-wrap.is-valid .form-input {
+  border-color: rgba(13,148,136,0.5);
+}
+.input-icon-wrap.is-valid .input-valid-icon {
+  opacity: 1;
+  transform: scale(1);
+}
+.input-valid-icon {
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%) scale(0.6);
+  opacity: 0; color: #14B8A6;
+  transition: opacity 0.25s, transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+  pointer-events: none;
+}
+
+/* ─── OTP box filled micro-bounce ─────────────────────────────────────────── */
+.otp-input.filled {
+  background: rgba(13,148,136,0.12);
+  border-color: rgba(13,148,136,0.4);
+  color: #14B8A6;
+}
+.otp-input.pop {
+  animation: otp-pop 0.25s cubic-bezier(0.34,1.56,0.64,1) both;
+}
+@keyframes otp-pop {
+  from { transform: scale(0.85); }
+  to   { transform: scale(1); }
+}
+
+/* ─── Auth step indicator active pulse ───────────────────────────────────── */
+.auth-step-item.active .auth-step-dot {
+  animation: step-glow 2s ease-in-out infinite;
+}
+@keyframes step-glow {
+  0%, 100% { box-shadow: 0 2px 12px rgba(13,148,136,0.4); }
+  50%       { box-shadow: 0 2px 20px rgba(13,148,136,0.75), 0 0 0 5px rgba(13,148,136,0.1); }
+}
+
+/* ─── Auth card entrance ──────────────────────────────────────────────────── */
+.auth-card {
+  animation: auth-card-in 0.5s cubic-bezier(0.16,1,0.3,1) both;
+}
+@keyframes auth-card-in {
+  from { opacity: 0; transform: translateY(24px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ─── Toast shake on error ───────────────────────────────────────────────── */
+.toast-error {
+  animation: toast-shake 0.5s cubic-bezier(0.36,0.07,0.19,0.97) both;
+}
+@keyframes toast-shake {
+  10%, 90% { transform: translateX(-2px); }
+  20%, 80% { transform: translateX(4px); }
+  30%, 50%, 70% { transform: translateX(-4px); }
+  40%, 60% { transform: translateX(4px); }
+}
+
+/* ─── Shimmer loading skeleton ────────────────────────────────────────────── */
+@keyframes skeleton-shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg,
+    rgba(255,255,255,0.04) 25%,
+    rgba(255,255,255,0.08) 50%,
+    rgba(255,255,255,0.04) 75%
+  );
+  background-size: 800px 100%;
+  animation: skeleton-shimmer 1.5s infinite linear;
+  border-radius: 8px;
+}
+[data-theme="light"] .skeleton {
+  background: linear-gradient(90deg,
+    rgba(0,0,0,0.04) 25%,
+    rgba(0,0,0,0.08) 50%,
+    rgba(0,0,0,0.04) 75%
+  );
+  background-size: 800px 100%;
+}
+
+/* ─── HTMX loading indicator ──────────────────────────────────────────────── */
+.htmx-indicator {
+  display: inline-block;
+  width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  animation: spin 0.7s linear infinite;
+  opacity: 0; transition: opacity 0.2s;
+  flex-shrink: 0;
+}
+.htmx-request .htmx-indicator { opacity: 1; }
+.htmx-request.htmx-indicator  { opacity: 1; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ─── Floating label on focused empty input ──────────────────────────────── */
+.form-input::placeholder { transition: opacity 0.2s; }
+.form-input:focus::placeholder { opacity: 0.4; }
+

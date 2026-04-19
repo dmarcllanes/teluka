@@ -38,24 +38,24 @@ async def upload_evidence_photo(
     filename: str,
     tx_id: str,
 ) -> str:
-    """
-    Upload one evidence photo to Supabase Storage.
-    Returns the public URL.
-    Raises ValueError for unsupported file types.
-    """
-    cfg      = get_config()
-    supabase = await get_supabase_admin()
+    """Upload one evidence photo. Returns the public URL (mock or real)."""
+    cfg = get_config()
 
-    ct           = _content_type(filename, _PHOTO_TYPES, "image/jpeg")
-    ext          = Path(filename).suffix.lower() or ".jpg"
+    ext = Path(filename).suffix.lower() or ".jpg"
     storage_path = f"{tx_id}/photos/{uuid.uuid4().hex}{ext}"
 
+    if cfg.mock_uploads:
+        url = f"https://mock-storage.teluka.dev/{storage_path}"
+        logger.info("[MOCK] Evidence photo tx=%s url=%s", tx_id, url)
+        return url
+
+    ct = _content_type(filename, _PHOTO_TYPES, "image/jpeg")
+    supabase = await get_supabase_admin()
     await supabase.storage.from_(cfg.storage_bucket).upload(
         storage_path,
         file_bytes,
         file_options={"content-type": ct, "upsert": "false"},
     )
-
     url = supabase.storage.from_(cfg.storage_bucket).get_public_url(storage_path)
     logger.info("Uploaded evidence photo tx=%s path=%s", tx_id, storage_path)
     return url
@@ -66,24 +66,24 @@ async def upload_unboxing_video(
     filename: str,
     tx_id: str,
 ) -> str:
-    """
-    Upload an unboxing video to Supabase Storage.
-    Returns the public URL.
-    Raises ValueError for unsupported file types.
-    """
-    cfg      = get_config()
-    supabase = await get_supabase_admin()
+    """Upload an unboxing video. Returns the public URL (mock or real)."""
+    cfg = get_config()
 
-    ct           = _content_type(filename, _VIDEO_TYPES, "video/mp4")
-    ext          = Path(filename).suffix.lower() or ".mp4"
+    ext = Path(filename).suffix.lower() or ".mp4"
     storage_path = f"{tx_id}/unboxing{ext}"
 
+    if cfg.mock_uploads:
+        url = f"https://mock-storage.teluka.dev/{storage_path}"
+        logger.info("[MOCK] Unboxing video tx=%s url=%s", tx_id, url)
+        return url
+
+    ct = _content_type(filename, _VIDEO_TYPES, "video/mp4")
+    supabase = await get_supabase_admin()
     await supabase.storage.from_(cfg.storage_bucket).upload(
         storage_path,
         file_bytes,
         file_options={"content-type": ct, "upsert": "true"},
     )
-
     url = supabase.storage.from_(cfg.storage_bucket).get_public_url(storage_path)
     logger.info("Uploaded unboxing video tx=%s path=%s", tx_id, storage_path)
     return url
