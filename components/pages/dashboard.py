@@ -74,6 +74,19 @@ _NEXT_ACTION: dict[tuple, str] = {
     (TransactionStatus.DISPUTED,           "seller"): "Dispute under review — we'll contact you",
 }
 
+_STRIPE_CLS = {
+    TransactionStatus.PENDING:            "stripe-pending",
+    TransactionStatus.ESCROWED:           "stripe-active",
+    TransactionStatus.EVIDENCE_SUBMITTED: "stripe-active",
+    TransactionStatus.IN_TRANSIT:         "stripe-active",
+    TransactionStatus.DELIVERED:          "stripe-active",
+    TransactionStatus.UNBOXING_UPLOADED:  "stripe-active",
+    TransactionStatus.COMPLETED:          "stripe-done",
+    TransactionStatus.DISPUTED:           "stripe-disputed",
+    TransactionStatus.CANCELLED:          "stripe-muted",
+    TransactionStatus.REFUNDED:           "stripe-muted",
+}
+
 _ACTIVE_STATUSES = {
     TransactionStatus.PENDING,
     TransactionStatus.ESCROWED,
@@ -175,34 +188,66 @@ def _dash_content(user: UserProfile, transactions: list[Transaction]) -> FT:
     completed = [t for t in transactions if t.status == TransactionStatus.COMPLETED]
     disputed  = [t for t in transactions if t.status == TransactionStatus.DISPUTED]
 
-    # Amount protected: sum of all non-cancelled transactions
     protected = sum(
         t.amount_centavos for t in transactions
         if t.status not in (TransactionStatus.CANCELLED,)
     ) / 100
 
     return (
-        _greeting_row(user),
+        _greeting_hero(user, len(active), protected),
         _trust_card(user),
-        _stats_row(len(active), len(completed), protected),
         _alert_banner(active, user),
         _new_deal_btn(),
         _transactions_section(transactions, user),
     )
 
 
-# ─── Greeting ─────────────────────────────────────────────────────────────────
+# ─── Greeting hero ────────────────────────────────────────────────────────────
 
-def _greeting_row(user: UserProfile) -> FT:
-    phone = user.phone or ""
+def _greeting_hero(user: UserProfile, active_count: int, protected_php: float) -> FT:
+    phone   = user.phone or ""
     display = phone[-4:] if len(phone) >= 4 else phone
-    return Div(cls="dash-greeting")(
-        Div(cls="dash-greeting-text")(
-            Div(id="greeting-msg", cls="dash-greeting-hi")("Welcome back 👋"),
-            Div(f"···{display}", cls="dash-greeting-name"),
+    protected_str = (
+        f"₱{protected_php/1000:.1f}k" if protected_php >= 1000
+        else f"₱{int(protected_php):,}"
+    )
+    active_str = f"{active_count} active deal{'s' if active_count != 1 else ''}"
+
+    return Div(cls="gh-wrap")(
+        # Ambient blobs
+        Div(cls="gh-blob gh-blob-1"),
+        Div(cls="gh-blob gh-blob-2"),
+
+        # Top row: greeting + new deal pill
+        Div(cls="gh-top")(
+            Div(cls="gh-left")(
+                Div(cls="gh-greeting-line")(
+                    Span(id="gh-icon", cls="gh-icon")("☀️"),
+                    Span(id="gh-msg",  cls="gh-msg")("Good morning"),
+                ),
+                Div(f"···{display}", cls="gh-name"),
+            ),
+            A(cls="gh-pill", href="/transactions/new")(
+                NotStr('<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'),
+                "New Deal",
+            ),
         ),
-        A(cls="dash-new-pill", href="/transactions/new")(
-            _icon_plus_sm(), "New Deal",
+
+        # Divider
+        Div(cls="gh-divider"),
+
+        # Stats row
+        Div(cls="gh-stats")(
+            Div(cls="gh-stat")(
+                Span(str(active_count), cls="gh-stat-val"),
+                Span(" active deal" + ("s" if active_count != 1 else ""), cls="gh-stat-label"),
+            ),
+            Div(cls="gh-stat-sep"),
+            Div(cls="gh-stat")(
+                Span("🛡️ ", cls="gh-stat-icon"),
+                Span(protected_str, cls="gh-stat-val"),
+                Span(" kept safe", cls="gh-stat-label"),
+            ),
         ),
     )
 
@@ -389,7 +434,8 @@ def _tx_card(tx: Transaction, user: UserProfile) -> FT:
     next_act  = _NEXT_ACTION.get((tx.status, role.lower()))
     show_act  = next_act and not next_act.startswith("Waiting")
 
-    return A(cls="tx-card", href=f"/transactions/{tx.id}")(
+    stripe = _STRIPE_CLS.get(tx.status, "stripe-muted")
+    return A(cls=f"tx-card {stripe}", href=f"/transactions/{tx.id}")(
         Div(cls="tx-card-top")(
             Div(icon, cls="tx-icon"),
             Div(cls="tx-info")(
@@ -520,9 +566,15 @@ def _scripts() -> FT:
 /* ── Time-based greeting ── */
 (function() {
   var h = new Date().getHours();
-  var greet = h < 12 ? 'Good morning 👋' : h < 18 ? 'Good afternoon 👋' : 'Good evening 👋';
-  var el = document.getElementById('greeting-msg');
-  if (el) el.textContent = greet;
+  var data = h < 12
+    ? { msg: 'Good morning',   icon: '☀️' }
+    : h < 18
+    ? { msg: 'Good afternoon', icon: '🌤️' }
+    : { msg: 'Good evening',   icon: '🌙' };
+  var msg  = document.getElementById('gh-msg');
+  var icon = document.getElementById('gh-icon');
+  if (msg)  msg.textContent  = data.msg;
+  if (icon) icon.textContent = data.icon;
 })();
 
 /* ── Animate trust ring ── */

@@ -27,7 +27,9 @@ from components.pages.login import (
     login_page, otp_step, pin_step, identifier_form_fragment, signup_form_fragment,
 )
 from components.pages.dashboard import dashboard_page
-from components.pages.profile import profile_page
+from components.pages.profile import (
+    profile_page, verify_pending_html, verify_done_html,
+)
 from components.pages.new_deal import (
     new_deal_page, seller_found_card, seller_not_found, seller_blocked,
 )
@@ -385,6 +387,76 @@ async def get(session):
 
     transactions = [Transaction(**r) for r in tx_rows]
     return profile_page(user, transactions)
+
+
+# ─── Profile edit ─────────────────────────────────────────────────────────────
+
+@rt("/profile/edit")
+async def post(request: Request, session):
+    user_id = get_session_user(session)
+    if not user_id:
+        return Response(status_code=401)
+
+    form  = await request.form()
+    email = form.get("email", "").strip()
+
+    supabase = await get_supabase_admin()
+    await supabase.table("users").update({"email": email or None}).eq("id", user_id).execute()
+    return Response(status_code=204)
+
+
+# ─── Wallet verification ──────────────────────────────────────────────────────
+
+@rt("/profile/verify-gcash")
+async def post(request: Request, session):
+    user_id = get_session_user(session)
+    if not user_id:
+        return Response(status_code=401)
+    form = await request.form()
+    number = form.get("gcash_number", "").strip()
+    # In production: call PayMongo / GCash API to send ₱1. For now: store pending number.
+    supabase = await get_supabase_admin()
+    await supabase.table("users").update({"gcash_pending_number": number}).eq("id", user_id).execute()
+    return verify_pending_html("gcash", "GCash", "💚")
+
+
+@rt("/profile/verify-gcash-confirm")
+async def post(request: Request, session):
+    user_id = get_session_user(session)
+    if not user_id:
+        return Response(status_code=401)
+    # In production: validate the ref against PayMongo. For now: mark as verified.
+    supabase = await get_supabase_admin()
+    await supabase.table("users").update({
+        "gcash_verified": True,
+        "kyc_status": "verified",
+    }).eq("id", user_id).execute()
+    return verify_done_html("GCash", "💚")
+
+
+@rt("/profile/verify-maya")
+async def post(request: Request, session):
+    user_id = get_session_user(session)
+    if not user_id:
+        return Response(status_code=401)
+    form = await request.form()
+    number = form.get("maya_number", "").strip()
+    supabase = await get_supabase_admin()
+    await supabase.table("users").update({"maya_pending_number": number}).eq("id", user_id).execute()
+    return verify_pending_html("maya", "Maya", "💜")
+
+
+@rt("/profile/verify-maya-confirm")
+async def post(request: Request, session):
+    user_id = get_session_user(session)
+    if not user_id:
+        return Response(status_code=401)
+    supabase = await get_supabase_admin()
+    await supabase.table("users").update({
+        "maya_verified": True,
+        "kyc_status": "verified",
+    }).eq("id", user_id).execute()
+    return verify_done_html("Maya", "💜")
 
 
 # ---------------------------------------------------------------------------

@@ -45,8 +45,8 @@ def login_page(error: str | None = None) -> FT:
                         ),
                     ),
 
-                    H1("Welcome", cls="auth-title"),
-                    P("Sign in or create a free account.", cls="auth-sub"),
+                    H1("Welcome back", cls="auth-title"),
+                    P("Secure escrow for Philippines marketplace deals.", cls="auth-sub"),
 
                     # Sign In / Sign Up tabs
                     Div(cls="auth-tabs")(
@@ -56,9 +56,6 @@ def login_page(error: str | None = None) -> FT:
                         Button("Sign Up", cls="auth-tab", id="tab-signup",
                                onclick="switchTab('signup')", type="button"),
                     ),
-
-                    # Step indicator
-                    _step_indicator(current=1),
 
                     # Form panes
                     Div(id="auth-step")(
@@ -78,30 +75,20 @@ def login_page(error: str | None = None) -> FT:
     )
 
 
-def _step_indicator(current: int) -> FT:
-    steps = [("Identity", 1), ("Verify", 2), ("Done", 3)]
-    items = []
-    for i, (label, num) in enumerate(steps):
-        if num < current:
-            state = "done"
-            dot_content = "✓"
-        elif num == current:
-            state = "active"
-            dot_content = str(num)
-        else:
-            state = ""
-            dot_content = str(num)
-
-        items.append(
-            Div(cls=f"auth-step-item {state}")(
-                Div(cls="auth-step-dot")(dot_content),
-                Div(cls="auth-step-label")(label),
-            )
-        )
-        if i < len(steps) - 1:
-            items.append(Div(cls=f"auth-step-line {'done' if num < current else ''}"))
-
-    return Div(cls="auth-steps")(*items)
+def _progress_bar(step: int) -> FT:
+    labels  = {1: "Enter your details", 2: "Verify your email", 3: "Set your PIN"}
+    pct     = {1: 33, 2: 67, 3: 100}
+    icons   = {1: "👤", 2: "✉️", 3: "🔐"}
+    return Div(cls="auth-progress")(
+        Div(cls="auth-progress-header")(
+            Span(icons[step], cls="auth-prog-icon"),
+            Span(f"Step {step} of 3", cls="auth-prog-step"),
+            Span(f" — {labels[step]}", cls="auth-prog-label"),
+        ),
+        Div(cls="auth-progress-track")(
+            Div(cls="auth-progress-fill", style=f"width:{pct[step]}%"),
+        ),
+    )
 
 
 def _trust_badges() -> FT:
@@ -290,39 +277,25 @@ def signup_form_fragment(phone: str = "", email: str = "", error: str | None = N
 
 def otp_step(masked_email: str, email: str, error: str | None = None, _phone: str = "") -> FT:
     return Div(
-        # Step indicator at step 2
-        _step_indicator(current=2),
+        cls="otp-step-wrap",
+        style="animation:auth-enter 0.4s cubic-bezier(0.16,1,0.3,1) both;",
+    )(
+        _progress_bar(2),
 
-        # Email sent card
-        Div(
-            style=(
-                "text-align:center;padding:20px 16px;margin-bottom:24px;"
-                "background:rgba(13,148,136,0.06);border:1px solid rgba(13,148,136,0.2);"
-                "border-radius:16px;"
-            )
-        )(
-            Div(
-                style=(
-                    "width:52px;height:52px;border-radius:50%;"
-                    "background:var(--grad-hero);margin:0 auto 12px;"
-                    "display:flex;align-items:center;justify-content:center;"
-                    "font-size:1.4rem;"
-                    "box-shadow:0 4px 16px rgba(13,148,136,0.4);"
-                    "animation:auth-enter 0.5s cubic-bezier(0.16,1,0.3,1) both;"
-                )
-            )("✉️"),
-            P(
-                "Code sent to",
-                style="font-size:0.8rem;color:var(--muted);margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;",
+        # Hero email icon
+        Div(cls="otp-hero")(
+            Div(cls="otp-hero-icon-wrap")(
+                Div(cls="otp-hero-pulse"),
+                Div(cls="otp-hero-pulse otp-hero-pulse-2"),
+                Div(cls="otp-hero-icon")("✉️"),
             ),
+            H2("Check your email", cls="otp-hero-title"),
             P(
-                masked_email,
-                style="font-size:1rem;font-weight:800;color:var(--jade-light);margin:0;",
+                Span("Code sent to ", style="color:var(--muted);"),
+                Span(masked_email, style="color:var(--jade-light);font-weight:800;"),
+                cls="otp-hero-sub",
             ),
-            P(
-                "Check inbox and spam folder",
-                style="font-size:0.75rem;color:var(--muted);margin-top:4px;",
-            ),
+            P("Check inbox and spam · expires in 10 min", cls="otp-hero-hint"),
         ),
 
         Div(Div(error, cls="toast toast-error"), style="margin-bottom:16px") if error else None,
@@ -339,7 +312,8 @@ def otp_step(masked_email: str, email: str, error: str | None = None, _phone: st
             Input(type="hidden", name="otp",   id="otp-hidden"),
 
             Div(cls="form-group")(
-                Label("Enter 6-Digit Code", cls="form-label", style="text-align:center;display:block;"),
+                Label("Enter the 6-digit code", cls="form-label",
+                      style="text-align:center;display:block;margin-bottom:12px;"),
                 Div(cls="otp-wrap", id="otp-boxes")(
                     *[
                         Input(
@@ -355,24 +329,21 @@ def otp_step(masked_email: str, email: str, error: str | None = None, _phone: st
                         for i in range(6)
                     ]
                 ),
-                P("Expires in 10 minutes.", cls="form-hint", style="text-align:center;"),
             ),
 
             Button(
                 _ico_lock(),
-                Span("Verify & Sign In"),
+                Span("Verify & Continue"),
                 Span(cls="htmx-indicator"),
                 type="submit",
                 id="otp-submit",
                 cls="btn btn-primary btn-block",
-                style="margin-top:8px;gap:8px;",
+                style="margin-top:4px;gap:8px;",
                 disabled=True,
             ),
         ),
 
-        Div(
-            style="margin-top:16px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;",
-        )(
+        Div(cls="otp-actions")(
             Button(
                 Span(id="resend-label")("Resend code"),
                 cls="btn btn-ghost btn-sm",
@@ -385,6 +356,7 @@ def otp_step(masked_email: str, email: str, error: str | None = None, _phone: st
                 hx_swap="innerHTML",
                 onclick="startResendCooldown()",
             ),
+            Span(cls="otp-actions-sep")("·"),
             Button(
                 "← Back",
                 cls="btn btn-ghost btn-sm",
@@ -552,30 +524,19 @@ _OTP_SCRIPT = """
 
 def pin_step(phone: str, email: str, error: str | None = None) -> FT:
     return Div(
-        _step_indicator(current=3),
+        style="animation:auth-enter 0.4s cubic-bezier(0.16,1,0.3,1) both;",
+    )(
+        _progress_bar(3),
 
         # Header
-        Div(
-            style=(
-                "text-align:center;padding:20px 16px;margin-bottom:24px;"
-                "background:rgba(13,148,136,0.06);border:1px solid rgba(13,148,136,0.2);"
-                "border-radius:16px;"
-            )
-        )(
-            Div(
-                style=(
-                    "width:52px;height:52px;border-radius:50%;"
-                    "background:var(--grad-hero);margin:0 auto 12px;"
-                    "display:flex;align-items:center;justify-content:center;"
-                    "font-size:1.4rem;"
-                    "box-shadow:0 4px 16px rgba(13,148,136,0.4);"
-                    "animation:auth-enter 0.5s cubic-bezier(0.16,1,0.3,1) both;"
-                )
-            )("🔐"),
-            P("Set your Security PIN",
-              style="font-size:0.9rem;font-weight:800;color:var(--text);margin-bottom:4px;"),
-            P("Used to reveal sensitive info like phone numbers.",
-              style="font-size:0.78rem;color:var(--muted);margin:0;"),
+        Div(cls="otp-hero")(
+            Div(cls="otp-hero-icon-wrap")(
+                Div(cls="otp-hero-pulse"),
+                Div(cls="otp-hero-icon")("🔐"),
+            ),
+            H2("Set your PIN", cls="otp-hero-title"),
+            P("Used to confirm critical actions like releasing payment.",
+              cls="otp-hero-sub", style="color:var(--muted);"),
         ),
 
         Div(Div(error, cls="toast toast-error"), style="margin-bottom:16px") if error else None,

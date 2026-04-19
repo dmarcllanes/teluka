@@ -13,170 +13,192 @@ def new_deal_page(session_user_id: str) -> FT:
                     _app_header(),
                     Main(cls="app-main")(
                         Div(cls="app-content")(
-                            Div("New Protected Deal", cls="dash-page-title"),
                             _deal_form(),
                         ),
                     ),
                     _bottom_nav(),
                 ),
             ),
-            Div(id="flash"),
+            Div(id="flash", style="position:fixed;bottom:80px;left:0;right:0;z-index:900;padding:0 16px;"),
             _scripts(),
         ),
     )
 
 
-# ─── Deal form ────────────────────────────────────────────────────────────
+# ─── Deal form ─────────────────────────────────────────────────────────────────
 
 def _deal_form() -> FT:
-    return Div(cls="deal-form-wrap")(
-        # Step indicators
-        Div(cls="deal-steps")(
-            Div(cls="deal-step active", id="step1-indicator")(Span("1"), "Find Seller"),
-            Div(cls="deal-step-divider"),
-            Div(cls="deal-step", id="step2-indicator")(Span("2"), "Deal Details"),
-            Div(cls="deal-step-divider"),
-            Div(cls="deal-step", id="step3-indicator")(Span("3"), "Choose Plan"),
+    return Div(cls="nd-wrap")(
+
+        # Page title row
+        Div(cls="nd-title-row")(
+            Div(cls="nd-title")("New Protected Deal"),
+            Div(cls="nd-title-sub")("Buyer initiates · funds held until confirmed"),
         ),
 
-        # ── Step 1: Find seller by phone ─────────────────────────────────
-        Div(id="step1", cls="deal-step-panel")(
-            Div(cls="deal-card")(
-                Div(cls="deal-card-title")("🔍 Find Seller"),
-                P("Enter the seller's Philippine mobile number.",
-                  style="font-size:0.85rem;color:var(--muted);margin-bottom:20px"),
+        # Progress bar — updated by JS when steps change
+        Div(cls="nd-progress")(
+            Div(cls="nd-progress-header")(
+                Span("🔍", id="nd-step-icon", cls="nd-prog-icon"),
+                Span("Step 1 of 3", id="nd-step-count", cls="nd-prog-step"),
+                Span(" — Find Seller", id="nd-step-label", cls="nd-prog-label"),
+            ),
+            Div(cls="nd-progress-track")(
+                Div(cls="nd-progress-fill", id="nd-progress-fill", style="width:33%"),
+            ),
+        ),
+
+        # ── Step 1: Find seller ───────────────────────────────────────────────
+        Div(id="step1", cls="nd-panel")(
+            Div(cls="nd-card")(
+                Div(cls="nd-card-icon")("🔍"),
+                Div(cls="nd-card-title")("Find Seller"),
+                P("Enter the seller's PH mobile number to look them up.",
+                  cls="nd-card-sub"),
                 Form(
-                    Div(cls="form-group")(
-                        Label("Seller's Mobile Number", cls="form-label"),
-                        Div(cls="input-wrap")(
-                            Span("+63", cls="input-prefix"),
-                            Input(
-                                type="tel", name="phone",
-                                placeholder="9XX XXX XXXX",
-                                maxlength="10", inputmode="numeric",
-                                cls="form-input has-prefix",
-                                autocomplete="off", required=True,
-                            ),
+                    Div(cls="nd-phone-wrap")(
+                        Span("+63", cls="nd-prefix"),
+                        Input(
+                            type="tel", name="phone",
+                            placeholder="9XX XXX XXXX",
+                            maxlength="10", inputmode="numeric",
+                            cls="form-input nd-phone-input",
+                            autocomplete="off", required=True,
                         ),
                     ),
                     Button(
-                        Span("Look Up Seller"),
+                        Span("Look Up"),
                         Span(cls="htmx-indicator"),
                         type="submit",
-                        cls="btn btn-primary btn-block",
+                        cls="btn btn-primary btn-block nd-lookup-btn",
                     ),
                     hx_post="/sellers/lookup",
                     hx_target="#seller-result",
                     hx_swap="innerHTML",
                     hx_indicator="find .htmx-indicator",
+                    style="margin-top:16px;",
                 ),
-                Div(id="seller-result", style="margin-top:20px"),
+                Div(id="seller-result", style="margin-top:16px"),
             ),
         ),
 
-        # ── Step 2: Deal details ──────────────────────────────────────────
-        Div(id="step2", cls="deal-step-panel", style="display:none")(
-            Div(cls="deal-card")(
-                Div(cls="deal-card-title")("📦 Deal Details"),
-                Div(
-                    Input(type="hidden", name="seller_id", id="confirmed-seller-id"),
-                    Div(cls="form-group")(
-                        Label("What are you buying?", cls="form-label"),
+        # ── Step 2: Deal details ──────────────────────────────────────────────
+        Div(id="step2", cls="nd-panel", style="display:none")(
+            # Back link
+            Button(
+                NotStr('<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>'),
+                " Back to seller lookup",
+                cls="nd-back-btn", type="button",
+                onclick="showStep('step1')",
+            ),
+            Input(type="hidden", id="confirmed-seller-id"),
+            Div(cls="nd-card")(
+                Div(cls="nd-card-icon")("📦"),
+                Div(cls="nd-card-title")("Deal Details"),
+                P("Describe exactly what you're buying and the agreed price.",
+                  cls="nd-card-sub"),
+
+                Div(cls="form-group")(
+                    Label("Item description", cls="form-label"),
+                    Input(
+                        name="item_description", id="item-desc-input",
+                        placeholder="e.g. iPhone 15 Pro Max 256GB Black",
+                        cls="form-input", required=True,
+                        oninput="updateChecklist()",
+                    ),
+                    P("Be specific — this locks in exactly what you're buying.", cls="form-hint"),
+                ),
+
+                Div(cls="form-group")(
+                    Label("Agreed amount (₱)", cls="form-label"),
+                    Div(cls="nd-amount-wrap")(
+                        Span("₱", cls="nd-prefix nd-amount-prefix"),
                         Input(
-                            name="item_description",
-                            id="item-desc-input",
-                            placeholder="e.g. iPhone 15 Pro Max 256GB Black",
-                            cls="form-input", required=True,
-                            oninput="updateChecklist()",
-                        ),
-                        P("Be specific — this locks in exactly what you're buying.",
-                          cls="form-hint"),
-                    ),
-                    Div(cls="form-group")(
-                        Label("Agreed Amount (₱)", cls="form-label"),
-                        Div(cls="input-wrap")(
-                            Span("₱", cls="input-prefix"),
-                            Input(
-                                name="amount_php", type="number",
-                                min="50", step="0.01",
-                                placeholder="0.00",
-                                id="amount-input",
-                                cls="form-input has-prefix",
-                                required=True,
-                                oninput="onAmountChange(this.value); updateChecklist()",
-                            ),
-                        ),
-                        P("Minimum ₱50. Held safely until you confirm the item.", cls="form-hint"),
-                        Div(cls="amount-preview hidden", id="amount-preview")(
-                            Div(cls="amount-preview-label")("Deal amount"),
-                            Div(cls="amount-preview-val", id="amount-preview-val")("₱0"),
+                            name="amount_php", type="number",
+                            min="50", step="0.01", placeholder="0.00",
+                            id="amount-input",
+                            cls="form-input nd-amount-input",
+                            required=True,
+                            oninput="onAmountChange(this.value); updateChecklist()",
                         ),
                     ),
-                    Div(cls="security-checklist")(
-                        Div("Your money is protected when:", cls="security-checklist-title"),
-                        Div(cls="check-item", id="chk-desc")(
-                            Div("✓", cls="check-dot"), Span("Item description is filled in"),
-                        ),
-                        Div(cls="check-item", id="chk-amount")(
-                            Div("✓", cls="check-dot"), Span("Amount is ₱50 or more"),
-                        ),
-                        Div(cls="check-item done")(
-                            Div("✓", cls="check-dot"), Span("Seller is confirmed"),
-                        ),
+                    Div(cls="nd-amount-preview hidden", id="amount-preview")(
+                        Span("Deal amount:", cls="nd-preview-label"),
+                        Span("₱0", cls="nd-preview-val", id="amount-preview-val"),
                     ),
-                    Button(
-                        "Next: Choose Protection →",
-                        type="button",
-                        cls="btn btn-primary btn-block",
-                        style="margin-top:16px",
-                        id="to-step3-btn",
-                        onclick="goToStep3()",
+                ),
+
+                # Protection checklist
+                Div(cls="nd-checklist")(
+                    Div(cls="nd-checklist-title")("✓ Your money is protected when:"),
+                    Div(cls="nd-check-row", id="chk-desc")(
+                        Div(cls="nd-check-dot"), Span("Item description is filled in"),
                     ),
+                    Div(cls="nd-check-row", id="chk-amount")(
+                        Div(cls="nd-check-dot"), Span("Amount is ₱50 or more"),
+                    ),
+                    Div(cls="nd-check-row nd-check-done")(
+                        Div(cls="nd-check-dot"), Span("Seller is confirmed on Teluka"),
+                    ),
+                ),
+
+                Button(
+                    "Next: Choose Protection",
+                    NotStr('<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>'),
+                    type="button", id="to-step3-btn",
+                    cls="btn btn-primary btn-block",
+                    style="margin-top:20px;gap:6px;",
+                    onclick="goToStep3()",
                 ),
             ),
         ),
 
-        # ── Step 3: Protection plan picker ────────────────────────────────
-        Div(id="step3", cls="deal-step-panel", style="display:none")(
-            Div(cls="deal-card")(
-                Div(cls="deal-card-title")("🛡️ Choose Your Protection Plan"),
-                P("Pick the level of security for this deal. You can always upgrade.",
-                  style="font-size:0.85rem;color:var(--muted);margin-bottom:20px"),
+        # ── Step 3: Protection plan picker ────────────────────────────────────
+        Div(id="step3", cls="nd-panel", style="display:none")(
+            Button(
+                NotStr('<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>'),
+                " Back to deal details",
+                cls="nd-back-btn", type="button",
+                onclick="showStep('step2')",
+            ),
+            Div(cls="nd-card")(
+                Div(cls="nd-card-icon")("🛡️"),
+                Div(cls="nd-card-title")("Choose Protection"),
+                P("Select the security level for this deal. Higher value = stronger plan.",
+                  cls="nd-card-sub"),
 
-                # Plan cards
-                Div(cls="plan-grid", id="plan-grid")(
+                Div(cls="nd-plan-grid", id="plan-grid")(
                     *[_plan_card(p) for p in PLANS.values()]
                 ),
 
                 # Fee summary
-                Div(cls="plan-summary hidden", id="plan-summary")(
-                    Div(cls="plan-summary-row")(
-                        Span("Item amount", cls="plan-summary-label"),
-                        Span(id="summary-item", cls="plan-summary-val"),
+                Div(cls="nd-summary hidden", id="plan-summary")(
+                    Div(cls="nd-summary-row")(
+                        Span("Item price", cls="nd-summary-label"),
+                        Span(id="summary-item", cls="nd-summary-val"),
                     ),
-                    Div(cls="plan-summary-row")(
-                        Span("Teluka service fee", cls="plan-summary-label"),
-                        Span(id="summary-fee", cls="plan-summary-val plan-summary-fee"),
+                    Div(cls="nd-summary-row")(
+                        Span("Teluka service fee", cls="nd-summary-label"),
+                        Span(id="summary-fee", cls="nd-summary-val nd-summary-fee"),
                     ),
-                    Div(cls="plan-summary-row plan-summary-total")(
-                        Span("Total you pay", cls="plan-summary-label"),
-                        Span(id="summary-total", cls="plan-summary-val"),
+                    Div(cls="nd-summary-row nd-summary-total")(
+                        Span("Total you pay", cls="nd-summary-label"),
+                        Span(id="summary-total", cls="nd-summary-val"),
                     ),
                 ),
 
-                # Hidden inputs submitted with the form
                 Form(
                     Input(type="hidden", name="seller_id",        id="form-seller-id"),
                     Input(type="hidden", name="item_description", id="form-item-desc"),
                     Input(type="hidden", name="amount_php",       id="form-amount"),
                     Input(type="hidden", name="protection_plan",  id="form-plan", value="basic"),
                     Button(
+                        NotStr('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>'),
                         Span("Protect This Deal"),
                         Span(cls="htmx-indicator"),
-                        type="submit",
-                        id="submit-deal-btn",
+                        type="submit", id="submit-deal-btn",
                         cls="btn btn-primary btn-block",
-                        style="margin-top:20px",
+                        style="margin-top:16px;gap:8px;",
                         disabled=True,
                     ),
                     hx_post="/transactions/create",
@@ -190,56 +212,64 @@ def _deal_form() -> FT:
 
 
 def _plan_card(plan) -> FT:
-    perks_html = [
-        Div(cls="plan-perk")(Span("✓", cls="plan-perk-check"), Span(p))
-        for p in plan.perks
-    ]
     fee_text = (
-        f"\u20b1{plan.flat_fee_centavos // 100} flat"
+        f"₱{plan.flat_fee_centavos // 100} flat"
         if plan.fee_type == "flat"
         else f"{int(plan.percent_fee * 100)}% of deal"
     )
-    fee_badge = Div(fee_text, cls="plan-fee-badge plan-fee-paid")
+    perks_html = [
+        Div(cls="nd-perk")(Span("✓", cls="nd-perk-check"), Span(p))
+        for p in plan.perks
+    ]
     return Div(
-        cls="plan-card",
+        cls="nd-plan-card",
         id=f"plan-{plan.id}",
         onclick=f"selectPlan('{plan.id}')",
-        **{"data-plan": plan.id,
-           "data-flat": str(plan.flat_fee_centavos),
-           "data-pct": str(plan.percent_fee),
-           "data-fee-type": plan.fee_type,
-           "data-min-fee": str(plan.min_fee_centavos)},
+        **{
+            "data-plan":     plan.id,
+            "data-flat":     str(plan.flat_fee_centavos),
+            "data-pct":      str(plan.percent_fee),
+            "data-fee-type": plan.fee_type,
+            "data-min-fee":  str(plan.min_fee_centavos),
+        },
     )(
-        Div(cls="plan-card-header")(
-            Div(cls="plan-icon")(plan.icon),
-            Div(cls="plan-name")(plan.name),
-            fee_badge,
+        # Header row — always visible
+        Div(cls="nd-plan-header")(
+            Div(cls="nd-plan-radio", id=f"radio-{plan.id}"),
+            Span(plan.icon, cls="nd-plan-icon"),
+            Div(cls="nd-plan-info")(
+                Span(plan.name, cls="nd-plan-name"),
+                Span(plan.tagline, cls="nd-plan-tagline"),
+            ),
+            Div(fee_text, cls="nd-plan-fee"),
         ),
-        Div(cls="plan-tagline")(plan.tagline),
-        Div(cls="plan-perks")(*perks_html),
-        Div(cls="plan-select-indicator")("✓ Selected"),
+        # Perks — slide open when selected
+        Div(cls="nd-plan-perks", id=f"perks-{plan.id}")(*perks_html),
     )
 
 
-# ─── Seller result fragments ───────────────────────────────────────────────
+# ─── Seller result fragments ───────────────────────────────────────────────────
 
 def seller_not_found(phone: str) -> FT:
-    return Div(cls="seller-not-found")(
-        Div("😕", style="font-size:2rem;margin-bottom:8px"),
-        Div("Seller not found", style="font-weight:700;color:var(--text);margin-bottom:4px"),
-        Div(
-            f"No Teluka account found for +63 {phone[-10:]}. "
-            "Ask the seller to sign up first.",
-            style="font-size:0.82rem;color:var(--muted);line-height:1.5",
+    return Div(cls="nd-seller-msg nd-seller-notfound")(
+        Span("😕", cls="nd-seller-msg-icon"),
+        Div(cls="nd-seller-msg-body")(
+            Div("Seller not found", cls="nd-seller-msg-title"),
+            Div(
+                f"No Teluka account for +63 {phone[-10:]}. Ask them to sign up first.",
+                cls="nd-seller-msg-sub",
+            ),
         ),
     )
 
 
 def seller_blocked(phone: str, reason: str) -> FT:
-    return Div(cls="seller-blocked")(
-        Div("🚫", style="font-size:2rem;margin-bottom:8px"),
-        Div("Transaction Blocked", style="font-weight:700;color:#FB7185;margin-bottom:4px"),
-        Div(reason, style="font-size:0.82rem;color:var(--muted);line-height:1.5"),
+    return Div(cls="nd-seller-msg nd-seller-blocked")(
+        Span("🚫", cls="nd-seller-msg-icon"),
+        Div(cls="nd-seller-msg-body")(
+            Div("Transaction Blocked", cls="nd-seller-msg-title"),
+            Div(reason, cls="nd-seller-msg-sub"),
+        ),
     )
 
 
@@ -256,45 +286,44 @@ def seller_found_card(seller: UserProfile, risk_flags: list[str]) -> FT:
     phone  = seller.phone
     masked = phone[:3] + "•" * (len(phone) - 7) + phone[-4:] if len(phone) > 7 else phone
 
-    warn_block = Div(cls="risk-warn")(
-        Div("⚠️ Warnings", cls="risk-warn-title"),
-        *[Div(f"• {f.replace('_', ' ').title()}", cls="risk-warn-item") for f in risk_flags],
+    warn_block = Div(cls="nd-risk-warn")(
+        Div("⚠️ Warnings", cls="nd-risk-title"),
+        *[Div(f"· {f.replace('_', ' ').title()}", cls="nd-risk-item") for f in risk_flags],
     ) if risk_flags else None
 
-    return Div(
-        Div(cls="seller-card")(
-            Div(cls="seller-card-left")(
-                Div(phone[-4:], cls="seller-avatar"),
-                Div(
-                    Div(masked, cls="seller-phone"),
-                    Div(cls="seller-meta")(
-                        Span(seller.trust_level.value.title() + " Trust", cls=f"profile-badge {level_cls}"),
-                        Span(
-                            "✓ GCash" if seller.gcash_verified else ("✓ Maya" if seller.maya_verified else "Unverified"),
-                            cls="profile-badge badge-kyc-verified" if (seller.gcash_verified or seller.maya_verified) else "profile-badge badge-kyc-unverified",
-                        ),
+    return Div(cls="nd-seller-found")(
+        Div(cls="nd-seller-row")(
+            Div(phone[-4:], cls="nd-seller-avatar"),
+            Div(cls="nd-seller-info")(
+                Div(masked, cls="nd-seller-phone"),
+                Div(cls="nd-seller-badges")(
+                    Span(seller.trust_level.value.title() + " Trust", cls=f"profile-badge {level_cls}"),
+                    Span(
+                        "✓ GCash" if seller.gcash_verified else ("✓ Maya" if seller.maya_verified else "Unverified"),
+                        cls="profile-badge badge-kyc-verified" if (seller.gcash_verified or seller.maya_verified) else "profile-badge badge-kyc-unverified",
                     ),
                 ),
             ),
-            Div(cls="seller-card-right")(
-                Div(f"{pct}", cls="seller-trust-val"),
-                Div("trust", style="font-size:0.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em"),
+            Div(cls="nd-trust-score")(
+                Div(f"{pct}", cls="nd-trust-num"),
+                Div("trust", cls="nd-trust-label"),
             ),
         ),
-        Div(cls="trust-bar", style="margin:12px 0 16px")(
-            Div(cls="trust-fill", style=f"width:{pct}%"),
+        Div(cls="nd-trust-bar")(
+            Div(cls="nd-trust-fill", style=f"width:{pct}%"),
         ),
         warn_block,
         Button(
-            "✓ This is my seller — Continue",
+            NotStr('<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'),
+            " This is my seller — Continue",
             cls="btn btn-primary btn-block",
-            style="margin-top:4px",
+            style="margin-top:12px;gap:6px;",
             onclick=f"confirmSeller('{seller.id}')",
         ),
     )
 
 
-# ─── Shared shell ─────────────────────────────────────────────────────────
+# ─── Shared shell ──────────────────────────────────────────────────────────────
 
 def _sidebar() -> FT:
     return Aside(cls="dash-sidebar")(
@@ -336,7 +365,7 @@ def _bottom_nav() -> FT:
     )
 
 
-# ─── SVG icons ────────────────────────────────────────────────────────────
+# ─── SVG icons ─────────────────────────────────────────────────────────────────
 
 def _icon_home():
     return Svg(NotStr('<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>'),
@@ -375,7 +404,7 @@ def _icon_user_nav():
         xmlns="http://www.w3.org/2000/svg", viewBox="0 0 24 24", fill="none", stroke="currentColor", stroke_width="2", stroke_linecap="round", stroke_linejoin="round")
 
 
-# ─── Head / scripts ───────────────────────────────────────────────────────
+# ─── Head / scripts ────────────────────────────────────────────────────────────
 
 def _head() -> FT:
     return Head(
@@ -404,29 +433,56 @@ function toggleTheme() {
   localStorage.setItem('teluka-theme', n);
 }
 
-/* ── Live amount preview ── */
-function updateAmountPreview(val) {
-  var preview = document.getElementById('amount-preview');
+/* ── Progress bar update ── */
+var _STEP_DATA = {
+  step1: { icon:'🔍', count:'Step 1 of 3', label:' — Find Seller',    pct:'33%'  },
+  step2: { icon:'📦', count:'Step 2 of 3', label:' — Deal Details',   pct:'67%'  },
+  step3: { icon:'🛡️', count:'Step 3 of 3', label:' — Choose Plan',    pct:'100%' },
+};
+
+function _updateProgress(stepId) {
+  var d = _STEP_DATA[stepId];
+  if (!d) return;
+  var icon  = document.getElementById('nd-step-icon');
+  var count = document.getElementById('nd-step-count');
+  var label = document.getElementById('nd-step-label');
+  var fill  = document.getElementById('nd-progress-fill');
+  if (icon)  icon.textContent  = d.icon;
+  if (count) count.textContent = d.count;
+  if (label) label.textContent = d.label;
+  if (fill)  fill.style.width  = d.pct;
+}
+
+function showStep(id) {
+  ['step1','step2','step3'].forEach(function(s) {
+    var el = document.getElementById(s);
+    if (!el) return;
+    el.style.display = s === id ? '' : 'none';
+    if (s === id) {
+      el.classList.remove('nd-panel'); void el.offsetWidth; el.classList.add('nd-panel');
+    }
+  });
+  _updateProgress(id);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  var main = document.querySelector('.app-main');
+  if (main) main.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+/* ── Amount preview ── */
+function onAmountChange(val) {
+  var preview    = document.getElementById('amount-preview');
   var previewVal = document.getElementById('amount-preview-val');
   var num = parseFloat(val);
   if (!preview || !previewVal) return;
   if (isNaN(num) || num <= 0) { preview.classList.add('hidden'); return; }
   preview.classList.remove('hidden');
-  previewVal.textContent = '₱' + num.toLocaleString('en-PH', {minimumFractionDigits:2,maximumFractionDigits:2});
-  previewVal.classList.remove('pop');
-  void previewVal.offsetWidth;
-  previewVal.classList.add('pop');
-  setTimeout(function() { previewVal.classList.remove('pop'); }, 200);
-}
-
-function onAmountChange(val) {
-  updateAmountPreview(val);
-  // Pre-highlight recommended plan in step 3
-  var num = parseFloat(val) * 100;
-  if (isNaN(num)) return;
-  var recommended = num >= 500000 ? 'premium' : (num >= 100000 ? 'standard' : 'basic');
-  document.querySelectorAll('.plan-card').forEach(function(c) {
-    c.classList.toggle('plan-recommended', c.dataset.plan === recommended);
+  previewVal.textContent = '₱' + num.toLocaleString('en-PH', {minimumFractionDigits:2, maximumFractionDigits:2});
+  previewVal.classList.remove('pop'); void previewVal.offsetWidth; previewVal.classList.add('pop');
+  // Pre-highlight recommended plan
+  var cents = num * 100;
+  var rec = cents >= 500000 ? 'premium' : (cents >= 100000 ? 'standard' : 'basic');
+  document.querySelectorAll('.nd-plan-card').forEach(function(c) {
+    c.classList.toggle('nd-plan-recommended', c.dataset.plan === rec);
   });
 }
 
@@ -436,61 +492,43 @@ function updateChecklist() {
   var amount = document.getElementById('amount-input');
   var chkDesc   = document.getElementById('chk-desc');
   var chkAmount = document.getElementById('chk-amount');
-  if (chkDesc)   chkDesc.classList.toggle('done',   desc   && desc.value.trim().length > 3);
-  if (chkAmount) chkAmount.classList.toggle('done', amount && parseFloat(amount.value) >= 50);
+  if (chkDesc)   chkDesc.classList.toggle('nd-check-done',   desc   && desc.value.trim().length > 2);
+  if (chkAmount) chkAmount.classList.toggle('nd-check-done', amount && parseFloat(amount.value) >= 50);
 }
 
 function confirmSeller(sellerId) {
   document.getElementById('confirmed-seller-id').value = sellerId;
   showStep('step2');
-  document.getElementById('step2-indicator').classList.add('active');
 }
 
 function goToStep3() {
   var desc   = document.getElementById('item-desc-input').value.trim();
   var amount = parseFloat(document.getElementById('amount-input').value);
-  if (!desc || desc.length < 2) { alert('Please enter an item description.'); return; }
-  if (isNaN(amount) || amount < 50) { alert('Please enter an amount of at least ₱50.'); return; }
-
-  // Copy values to the hidden form inputs in step 3
+  if (!desc || desc.length < 2) { _toast('Please enter an item description.', 'error'); return; }
+  if (isNaN(amount) || amount < 50) { _toast('Please enter an amount of at least ₱50.', 'error'); return; }
   document.getElementById('form-seller-id').value  = document.getElementById('confirmed-seller-id').value;
   document.getElementById('form-item-desc').value  = desc;
-  document.getElementById('form-amount').value     = amount;
-
+  document.getElementById('form-amount').value      = amount;
   showStep('step3');
-  document.getElementById('step3-indicator').classList.add('active');
-
-  // Trigger recommended plan highlight
   onAmountChange(amount);
-}
-
-function showStep(id) {
-  ['step1','step2','step3'].forEach(function(s) {
-    var el = document.getElementById(s);
-    if (el) el.style.display = s === id ? '' : 'none';
-    // Re-trigger slide animation
-    if (s === id && el) {
-      el.classList.remove('deal-step-panel');
-      void el.offsetWidth;
-      el.classList.add('deal-step-panel');
-    }
-  });
-  document.querySelector('.app-main').scrollTo({top:0,behavior:'smooth'});
-  window.scrollTo({top:0,behavior:'smooth'});
 }
 
 /* ── Plan selection ── */
 var _selectedPlan = null;
-
 function selectPlan(planId) {
   _selectedPlan = planId;
-  document.querySelectorAll('.plan-card').forEach(function(c) {
-    c.classList.toggle('plan-selected', c.dataset.plan === planId);
+  document.querySelectorAll('.nd-plan-card').forEach(function(c) {
+    var sel = c.dataset.plan === planId;
+    c.classList.toggle('nd-plan-selected', sel);
+    var perks = document.getElementById('perks-' + c.dataset.plan);
+    var radio = document.getElementById('radio-' + c.dataset.plan);
+    if (perks) perks.classList.toggle('nd-plan-perks-open', sel);
+    if (radio) radio.classList.toggle('nd-radio-checked', sel);
   });
   document.getElementById('form-plan').value = planId;
 
-  var amount = parseFloat(document.getElementById('form-amount').value) * 100;
-  var card   = document.querySelector('[data-plan="' + planId + '"]');
+  var amount  = parseFloat(document.getElementById('form-amount').value) * 100;
+  var card    = document.querySelector('[data-plan="' + planId + '"]');
   var feeType = card.dataset.feeType;
   var fee = 0;
   if (feeType === 'flat') {
@@ -498,20 +536,28 @@ function selectPlan(planId) {
   } else if (feeType === 'percent') {
     fee = Math.max(parseInt(card.dataset.minFee), Math.round(amount * parseFloat(card.dataset.pct)));
   }
-
-  var fmt = function(c) { return '₱' + (c/100).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2}); };
+  var fmt = function(c) {
+    return '₱' + (c/100).toLocaleString('en-PH', {minimumFractionDigits:2, maximumFractionDigits:2});
+  };
   document.getElementById('summary-item').textContent  = fmt(amount);
   document.getElementById('summary-fee').textContent   = fmt(fee);
   document.getElementById('summary-total').textContent = fmt(amount + fee);
 
-  var summary = document.getElementById('plan-summary');
-  summary.classList.remove('hidden');
-  summary.classList.add('plan-summary-enter');
-  setTimeout(function() { summary.classList.remove('plan-summary-enter'); }, 400);
-
+  var s = document.getElementById('plan-summary');
+  s.classList.remove('hidden');
   document.getElementById('submit-deal-btn').disabled = false;
 }
 
+/* ── Toast helper ── */
+function _toast(msg, type) {
+  var f = document.getElementById('flash');
+  if (!f) return;
+  var cls = type === 'error' ? 'toast toast-error' : 'toast toast-success';
+  f.innerHTML = '<div class="' + cls + '">' + msg + '</div>';
+  setTimeout(function(){ f.innerHTML = ''; }, 3500);
+}
+
+/* ── Scroll-hide header / nav ── */
 (function () {
   var header = document.querySelector('.app-header');
   var bottomNav = document.querySelector('.bottom-nav');
