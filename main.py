@@ -306,13 +306,14 @@ def get():
 
 
 @rt("/check-identifier")
-async def post(request: Request, identifier: str):
+async def post(request: Request, identifier: str, mode: str = ""):
     """
     Step 1: user enters phone or email.
     - Phone + existing user  → send OTP to their email → otp_step
     - Phone + new user       → ask for email → register_email_step
     - Email + existing user  → send OTP to that email → otp_step
     - Email + not found      → error
+    mode='signin' → error if user not found (don't offer sign-up)
     """
     identifier = identifier.strip()
     client_ip  = _get_client_ip(request)
@@ -349,6 +350,10 @@ async def post(request: Request, identifier: str):
     user = await get_user_by_identifier(normalised)
 
     if not user:
+        if mode == "signin":
+            return identifier_form_fragment(
+                error="No account found with that number. Please sign up instead."
+            )
         return signup_form_fragment(phone=normalised)
 
     email = user.get("email")
@@ -372,10 +377,10 @@ async def post(request: Request, identifier: str):
 
 
 @rt("/register")
-async def post(request: Request, phone: str, email: str):
+async def post(request: Request, phone: str, email: str, pin: str = "", pin_confirm: str = ""):
     """
-    Step 2 for new users: phone (already normalised) + email.
-    Creates OTP keyed on email, sends it, returns otp_step.
+    Sign-up step: phone + email + PIN (all collected upfront in new wizard).
+    Creates OTP keyed on email, sends it, returns otp_step with PIN passed through.
     """
     form = await request.form()
     # Honeypot — bots fill this field, humans leave it empty
@@ -383,9 +388,19 @@ async def post(request: Request, phone: str, email: str):
         return signup_form_fragment(phone=phone, error="Registration failed. Please try again.")
 
     email = email.strip().lower()
+    pin   = pin.strip()
+    pin_confirm = pin_confirm.strip()
 
     if not is_email(email):
-        return signup_form_fragment(phone=phone, error="Please enter a valid email address.")
+        return signup_form_fragment(phone=phone, email=email, error="Please enter a valid email address.")
+
+    # Validate PIN
+    if pin:
+        err = validate_pin(pin)
+        if err:
+            return signup_form_fragment(phone=phone, email=email, error=err)
+        if pin != pin_confirm:
+            return signup_form_fragment(phone=phone, email=email, error="PINs do not match. Please try again.")
 
     # Check email not already taken
     existing = await get_user_by_identifier(email)
@@ -407,9 +422,7 @@ async def post(request: Request, phone: str, email: str):
         logger.exception("register send error")
         return signup_form_fragment(phone=phone, error="Something went wrong. Please try again.")
 
-    # Store phone in hidden field via otp_step so verify-otp can create the user
-    # We pass phone encoded into the email field's companion hidden input
-    return otp_step(mask_email(email), email, _phone=phone)
+    return otp_step(mask_email(email), email, _phone=phone, _pin=pin)
 
 
 @rt("/resend-otp")
@@ -449,6 +462,8 @@ async def post(request: Request, session):
     if not ok:
         return Div(Div(error_msg, cls="toast toast-error"))
 
+    pin = form.get("pin", "").strip()
+
     try:
         user = await get_user_by_identifier(email)
         if user:
@@ -473,8 +488,44 @@ async def post(request: Request, session):
                 "login", user_id=user_id, identifier=mask_email(email), ip=client_ip, success=True
             ))
         elif phone:
-            # New user — go to PIN creation step before creating account
-            return pin_step(phone=phone, email=email)
+            if pin:
+                # New user — create account directly with PIN collected in sign-up form
+                hashed  = hash_pin(pin)
+                user_id = await get_or_create_user(phone, email, pin_hash=hashed)
+                session.clear()
+                set_session_user(session, user_id, phone)
+                logger.info("New user created user=%s", user_id)
+                new_user_overlay = Div(
+                    Div(cls="verify-success-overlay")(
+                        Div(cls="vso-backdrop"),
+                        Div(cls="vso-card")(
+                            Div(cls="vso-icon-wrap")(
+                                Div(cls="vso-ring"),
+                                Div(cls="vso-ring vso-ring-2"),
+                                Div(cls="vso-check")(
+                                    NotStr(
+                                        '<svg width="36" height="36" viewBox="0 0 24 24" fill="none"'
+                                        ' stroke="white" stroke-width="3" stroke-linecap="round"'
+                                        ' stroke-linejoin="round"'
+                                        ' style="stroke-dasharray:40;stroke-dashoffset:0">'
+                                        '<polyline points="20 6 9 17 4 12"/></svg>'
+                                    ),
+                                ),
+                            ),
+                            H2("Account Created!", cls="vso-title"),
+                            P("Welcome to Teluka. Taking you to your dashboard…", cls="vso-sub"),
+                            Div(cls="vso-bar-track")(Div(cls="vso-bar-fill")),
+                        ),
+                    ),
+                    Script("setTimeout(() => { window.location.href = '/dashboard'; }, 2000);"),
+                )
+                return HTMLResponse(
+                    content=to_xml(new_user_overlay),
+                    headers={"HX-Retarget": "#vso-portal", "HX-Reswap": "innerHTML"},
+                )
+            else:
+                # Old flow fallback — go to PIN creation step
+                return pin_step(phone=phone, email=email)
         else:
             return Div(Div("Account error. Please start over.", cls="toast toast-error"))
     except Exception:
