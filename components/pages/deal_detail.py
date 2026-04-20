@@ -164,7 +164,7 @@ def _deal_info_card(
                 Div("—", cls="deal-party-phone"),
             )
         phone   = user.phone
-        masked  = phone[:3] + "•" * (len(phone) - 7) + phone[-4:] if len(phone) > 7 else phone
+        masked  = phone
         initial = phone[-4:]
         return Div(cls="deal-party")(
             Div(cls="deal-party-label")(label),

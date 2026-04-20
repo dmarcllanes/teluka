@@ -156,7 +156,7 @@ def _profile_content(user: UserProfile, transactions: list[Transaction]) -> FT:
 def _profile_hero(user: UserProfile) -> FT:
     initials = user.phone[-4:] if len(user.phone) >= 4 else "??"
     phone     = user.phone
-    masked    = (phone[:3] + "•" * (len(phone) - 7) + phone[-4:]) if len(phone) > 7 else phone
+    masked    = phone
 
     trust_cls = {
         TrustLevel.NEW:         "badge-trust-new",
@@ -181,7 +181,7 @@ def _profile_hero(user: UserProfile) -> FT:
             Div(cls="avatar avatar-lg")(avatar_inner, Div(cls="avatar-ring")),
             Div("✏️", cls="pf-avatar-edit-badge"),
             cls="pf-avatar-btn",
-            **{"data-tab": "photos"},
+            onclick="switchTab('photos')",
             type="button",
             title="Update photo",
         ),
@@ -254,7 +254,8 @@ def _tab_bar() -> FT:
                 icon,
                 Span(label, cls="pf-tab-label"),
                 cls="pf-tab-btn" + (" pf-tab-active" if i == 0 else ""),
-                **{"data-tab": key},
+                data_tab=key,
+                onclick=f"switchTab('{key}')",
                 type="button",
             )
             for i, (key, label, icon) in enumerate(tabs)
@@ -395,14 +396,15 @@ def _avatar_card(user: UserProfile) -> FT:
                     id="avatar-file-input", type="file", name="avatar",
                     accept="image/jpeg,image/png,image/webp",
                     style="display:none",
-                    onchange="previewAvatar(this)",
+                    onchange="previewAvatar(this); document.getElementById('avatar-submit-btn').disabled=false;",
                 ),
             ),
             Button(
                 Span(cls="htmx-indicator"), "Upload Photo",
                 type="submit", id="avatar-submit-btn",
                 cls="pf-save-btn",
-                style="margin-top:12px;display:none",
+                style="margin-top:12px;",
+                disabled=True,
             ),
         ),
     )
@@ -977,20 +979,24 @@ function updateThemeLabel() {
   var el = document.getElementById('theme-label');
   if (el) el.textContent = document.documentElement.getAttribute('data-theme') === 'dark' ? 'Dark' : 'Light';
 }
-document.addEventListener('DOMContentLoaded', updateThemeLabel);
+updateThemeLabel();
 
-/* ── Tab event delegation (handles tab bar + avatar button) ── */
-document.addEventListener('DOMContentLoaded', function() {
-  var bar = document.getElementById('pf-tab-bar');
-  if (bar) bar.addEventListener('click', function(e) {
-    var btn = e.target.closest('[data-tab]');
-    if (btn) switchTab(btn.getAttribute('data-tab'));
+/* ── Tab switcher — defined first so inline onclick handlers can call it ── */
+function switchTab(key) {
+  document.querySelectorAll('.pf-tab-btn').forEach(function(b) {
+    b.classList.toggle('pf-tab-active', b.dataset.tab === key);
   });
-  var avatarBtn = document.querySelector('.pf-avatar-btn[data-tab]');
-  if (avatarBtn) avatarBtn.addEventListener('click', function() {
-    switchTab(avatarBtn.getAttribute('data-tab'));
+  document.querySelectorAll('.pf-tab-panel').forEach(function(p) {
+    p.classList.toggle('pf-tab-panel-active', p.dataset.panel === key);
   });
-});
+  localStorage.setItem('pf-tab', key);
+}
+
+/* ── Restore last-used tab from localStorage ── */
+(function() {
+  var saved = localStorage.getItem('pf-tab');
+  if (saved) switchTab(saved);
+})();
 
 /* ── Edit button — switch to overview and focus email input ── */
 function focusEditForm() {
@@ -998,21 +1004,6 @@ function focusEditForm() {
   var el = document.getElementById('pf-email');
   if (el) { el.focus(); el.scrollIntoView({behavior: 'smooth', block: 'center'}); }
 }
-
-/* ── Tab switcher ── */
-function switchTab(key) {
-  document.querySelectorAll('.pf-tab-btn').forEach(function(b) {
-    b.classList.toggle('pf-tab-active', b.getAttribute('data-tab') === key);
-  });
-  document.querySelectorAll('.pf-tab-panel').forEach(function(p) {
-    p.classList.toggle('pf-tab-panel-active', p.getAttribute('data-panel') === key);
-  });
-  localStorage.setItem('pf-tab', key);
-}
-(function() {
-  var saved = localStorage.getItem('pf-tab');
-  if (saved) switchTab(saved);
-})();
 
 /* ── Wallet verify ── */
 var _verifyOriginals = {};
@@ -1069,10 +1060,7 @@ function previewAvatar(input) {
   var reader = new FileReader();
   reader.onload = function(e) {
     var wrap = document.querySelector('.avatar-preview-wrap');
-    if (!wrap) return;
-    wrap.innerHTML = '<img src="' + e.target.result + '" class="avatar-preview-img" alt="Preview">';
-    var btn = document.getElementById('avatar-submit-btn');
-    if (btn) btn.style.display = '';
+    if (wrap) wrap.innerHTML = '<img src="' + e.target.result + '" class="avatar-preview-img" alt="Preview">';
   };
   reader.readAsDataURL(file);
 }

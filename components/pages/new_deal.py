@@ -286,7 +286,7 @@ def seller_found_card(seller: UserProfile, risk_flags: list[str]) -> FT:
     }.get(seller.trust_level, "badge-trust-new")
 
     phone  = seller.phone
-    masked = phone[:3] + "•" * (len(phone) - 7) + phone[-4:] if len(phone) > 7 else phone
+    masked = phone
 
     warn_block = Div(cls="nd-risk-warn")(
         Div("⚠️ Warnings", cls="nd-risk-title"),
