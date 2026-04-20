@@ -77,6 +77,8 @@ def login_page(error: str | None = None) -> FT:
                     _auth_toprow(),
                     Div(id="auth-step")(
                         _choice_step(),
+                        _signin_step(),
+                        _signup_step(),
                     ),
                     Div(id="flash"),
                     _trust_badges(),
