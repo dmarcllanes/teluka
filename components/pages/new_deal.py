@@ -420,6 +420,7 @@ def _head() -> FT:
         Link(rel="stylesheet", href="/static/css/dashboard.css"),
         Link(rel="stylesheet", href="/static/css/deal.css"),
         Script(src="https://unpkg.com/htmx.org@1.9.12"),
+        Script(src="/static/js/app.js"),
         Script("(function(){var t=localStorage.getItem('teluka-theme')||(window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark');document.documentElement.setAttribute('data-theme',t);})();"),
     )
 

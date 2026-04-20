@@ -8,7 +8,7 @@
      • Offline fallback                    → /offline  (pre-cached)
    ───────────────────────────────────────────────────────────────────────────── */
 
-const CACHE_VERSION  = "teluka-v2";
+const CACHE_VERSION  = "teluka-v3";
 const STATIC_CACHE   = `${CACHE_VERSION}-static`;
 const PAGES_CACHE    = `${CACHE_VERSION}-pages`;
 const ALL_CACHES     = [STATIC_CACHE, PAGES_CACHE];
@@ -153,6 +153,43 @@ async function networkFirst(request, cacheName) {
     return cached || offlinePage();
   }
 }
+
+/* ── Push notifications ────────────────────────────────────────────────────── */
+
+self.addEventListener("push", (event) => {
+  if (!event.data) return;
+  let payload = { title: "Teluka", body: "You have a new update.", url: "/dashboard" };
+  try { payload = event.data.json(); } catch {}
+
+  event.waitUntil(
+    self.registration.showNotification(payload.title, {
+      body:    payload.body,
+      icon:    "/static/icons/icon-192.png",
+      badge:   "/static/icons/icon-192.png",
+      tag:     "teluka-deal",        // replace previous notification of same type
+      renotify: true,
+      data:    { url: payload.url },
+      actions: [{ action: "open", title: "View Deal" }],
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || "/dashboard";
+  event.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      for (const client of list) {
+        if (client.url.includes(self.location.origin) && "focus" in client) {
+          client.navigate(url);
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) return clients.openWindow(url);
+    })
+  );
+});
+
 
 function offlinePage() {
   return new Response(

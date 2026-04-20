@@ -37,6 +37,8 @@ def _profile_content(user: UserProfile, transactions: list[Transaction]) -> FT:
         _edit_panel(user),
         _trust_card(user),
         _stats_card(len(transactions), completed, user.scam_reports),
+        _avatar_card(user),
+        _trust_photo_card(user),
         _verification_card(user),
         _settings_card(),
     )
@@ -60,9 +62,15 @@ def _profile_hero(user: UserProfile) -> FT:
     kyc_label = "KYC Verified" if user.kyc_status == KYCStatus.VERIFIED else "Unverified"
     kyc_cls   = "badge-kyc-verified" if user.kyc_status == KYCStatus.VERIFIED else "badge-kyc-unverified"
 
+    avatar_inner = (
+        Img(id="avatar-img", src=user.avatar_url, alt="Avatar", cls="avatar-photo")
+        if user.avatar_url else
+        Span(initials, id="avatar-initials")
+    )
+
     return Div(cls="profile-hero")(
         Div(cls="avatar")(
-            Span(initials),
+            avatar_inner,
             Div(cls="avatar-ring"),
         ),
         Div(masked, cls="profile-name"),
@@ -141,6 +149,151 @@ def _edit_panel(user: UserProfile) -> FT:
                 ),
                 A("Change PIN →" if user.pin_hash else "Set PIN →", href="/profile/change-pin", cls="pf-pin-link"),
             ),
+        ),
+    )
+
+
+# ─── Avatar upload card ─────────────────────────────────────────────────────────
+
+def _avatar_card(user: UserProfile) -> FT:
+    return Div(cls="profile-card")(
+        Div(cls="pf-photo-header")(
+            Div(cls="pf-photo-title-row")(
+                Div("🖼️", cls="pf-photo-icon"),
+                Div(cls="pf-photo-title-block")(
+                    Div("Profile Photo", cls="profile-card-title", style="margin:0"),
+                    Div(
+                        "Photo set ✓" if user.avatar_url else "No photo — add one to build trust",
+                        cls="pf-photo-status " + ("pf-photo-ok" if user.avatar_url else "pf-photo-none"),
+                    ),
+                ),
+            ),
+        ),
+        P(
+            "Your profile photo is shown to deal counterparties. "
+            "Any file you upload is automatically re-encoded — no malicious content can pass through.",
+            cls="pf-photo-hint",
+        ),
+        Form(
+            id="avatar-form",
+            hx_post="/profile/avatar",
+            hx_target="#flash",
+            hx_swap="innerHTML",
+            hx_encoding="multipart/form-data",
+        )(
+            Div(cls="avatar-upload-area", id="avatar-drop-area")(
+                Div(cls="avatar-preview-wrap")(
+                    Img(
+                        src=user.avatar_url, alt="Current avatar",
+                        cls="avatar-preview-img",
+                    ) if user.avatar_url else Div(cls="avatar-preview-placeholder")("📷"),
+                ),
+                Div(cls="avatar-upload-text")(
+                    Label(
+                        "Choose photo" if not user.avatar_url else "Replace photo",
+                        for_="avatar-file-input",
+                        cls="avatar-choose-btn",
+                    ),
+                    P("JPEG or PNG · max 2 MB", cls="avatar-type-hint"),
+                ),
+                Input(
+                    id="avatar-file-input",
+                    type="file",
+                    name="avatar",
+                    accept="image/jpeg,image/png,image/webp",
+                    style="display:none",
+                    onchange="previewAvatar(this)",
+                ),
+            ),
+            Button(
+                Span(cls="htmx-indicator"),
+                "Upload Photo",
+                type="submit",
+                id="avatar-submit-btn",
+                cls="pf-save-btn",
+                style="margin-top:12px;display:none",
+            ),
+        ),
+    )
+
+
+# ─── Real-time trust photo card ─────────────────────────────────────────────────
+
+def _trust_photo_card(user: UserProfile) -> FT:
+    taken_label = ""
+    if user.trust_photo_taken_at:
+        try:
+            from datetime import timezone
+            dt = user.trust_photo_taken_at
+            taken_label = dt.strftime("%-d %b %Y")
+        except Exception:
+            taken_label = "previously"
+
+    existing = Div(id="trust-photo-card")(
+        Img(src=user.trust_photo_url, cls="trust-photo-result", alt="Trust photo"),
+        P(f"📸 Taken {taken_label} · Visible to deal counterparties", cls="trust-photo-taken"),
+        Button("Retake", cls="tp-retake-btn", onclick="startTrustCamera()"),
+    ) if user.trust_photo_url else Div(id="trust-photo-card")(
+        Div(cls="tp-empty")(
+            Div("📸", cls="tp-empty-icon"),
+            P("No trust photo yet", cls="tp-empty-label"),
+        ),
+    )
+
+    return Div(cls="profile-card")(
+        Div(cls="pf-photo-header")(
+            Div(cls="pf-photo-title-row")(
+                Div("🤳", cls="pf-photo-icon"),
+                Div(cls="pf-photo-title-block")(
+                    Div("Real-Time Trust Photo", cls="profile-card-title", style="margin:0"),
+                    Div(
+                        "Trust photo on file ✓" if user.trust_photo_url else "Optional · boosts buyer confidence",
+                        cls="pf-photo-status " + ("pf-photo-ok" if user.trust_photo_url else "pf-photo-none"),
+                    ),
+                ),
+            ),
+        ),
+        P(
+            "Take a live selfie using your device camera — this is NOT a file upload. "
+            "It shows deal partners you're a real, present person. "
+            "This is extra trust info only, not required for verification.",
+            cls="pf-photo-hint",
+        ),
+
+        # Camera UI (hidden until activated)
+        Div(id="trust-camera-wrap", style="display:none")(
+            # Status badge
+            Div(id="trust-status", cls="trust-status trust-status-detecting")(
+                "🔍 Position your face in the oval…"
+            ),
+            # Video + canvas overlay stacked
+            Div(cls="trust-video-wrap")(
+                Video(id="trust-video", autoplay=True, playsinline=True, muted=True, cls="trust-camera-feed"),
+                Canvas(id="trust-overlay", cls="trust-overlay"),
+            ),
+            # Liveness progress bar
+            Div(cls="trust-live-bar-track")(
+                Div(id="trust-live-bar", cls="trust-live-bar", style="width:0%"),
+            ),
+            Div(id="trust-bar-label", cls="trust-bar-label")("Liveness scan starting…"),
+            # Challenge prompt (hidden until needed)
+            Div(id="trust-challenge", cls="trust-challenge", style="visibility:hidden"),
+            # Offscreen pixel-analysis canvas (never shown)
+            Canvas(id="trust-canvas", style="position:absolute;left:-9999px;top:-9999px;width:1px;height:1px"),
+            Div(cls="trust-camera-controls")(
+                Button("Cancel", cls="tp-cancel-btn", onclick="cancelTrustCamera()", type="button"),
+            ),
+        ),
+
+        existing,
+
+        Button(
+            "📷 Take Live Photo",
+            cls="pf-save-btn",
+            id="tp-open-btn",
+            style="margin-top:12px",
+            type="button",
+            onclick="startTrustCamera()",
         ),
     )
 
@@ -372,6 +525,17 @@ def _settings_card() -> FT:
         Div("Settings", cls="profile-card-title"),
         Div(cls="settings-list")(
             Button(
+                Div("🔔", cls="settings-item-icon"),
+                Div("Notifications", cls="settings-item-label"),
+                Div(id="notif-toggle-label",
+                    style="font-size:0.78rem;color:var(--muted);margin-right:8px"),
+                Span("›", cls="settings-item-arrow"),
+                cls="settings-item",
+                id="notif-toggle-btn",
+                onclick="handleNotifToggle()",
+                type="button",
+            ),
+            Button(
                 Div("◐", cls="settings-item-icon"),
                 Div("Appearance", cls="settings-item-label"),
                 Div(id="theme-label", style="font-size:0.78rem;color:var(--muted);margin-right:8px"),
@@ -522,6 +686,7 @@ def _head() -> FT:
         Link(rel="stylesheet", href="/static/css/app.css"),
         Link(rel="stylesheet", href="/static/css/dashboard.css"),
         Script(src="https://unpkg.com/htmx.org@1.9.12"),
+        Script(src="/static/js/app.js"),
         Script("(function(){var t=localStorage.getItem('teluka-theme')||(window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark');document.documentElement.setAttribute('data-theme',t);})();"),
     )
 
@@ -665,6 +830,331 @@ function _showToast(msg, type) {
   if (main) main.addEventListener('scroll', function(){ if (!ticking){ requestAnimationFrame(function(){ update(main.scrollTop); }); ticking=true; } }, {passive:true});
   window.addEventListener('scroll', function(){ if (!ticking){ requestAnimationFrame(function(){ update(window.scrollY); }); ticking=true; } }, {passive:true});
 })();
+
+/* ── Avatar preview before upload ── */
+function previewAvatar(input) {
+  var file = input.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var wrap = document.querySelector('.avatar-preview-wrap');
+    if (!wrap) return;
+    wrap.innerHTML = '<img src="' + e.target.result + '" class="avatar-preview-img" alt="Preview">';
+    var btn = document.getElementById('avatar-submit-btn');
+    if (btn) btn.style.display = '';
+  };
+  reader.readAsDataURL(file);
+}
+
+/* ── Real-time trust photo — liveness detection ─────────────────────────────
+   Three-layer anti-spoofing:
+   1. Motion analysis   — frame pixel differences prove live video (not a photo)
+   2. Face presence     — FaceDetector API (Chrome/Edge) with skin-tone fallback
+   3. Random challenge  — user must perform a head gesture to spike motion
+   ── */
+var _trustStream    = null;
+var _trustInterval  = null;
+var _manualTimer    = null;
+var _trustState     = 'idle';   // idle | detecting | challenging | captured
+var _prevFrameData  = null;
+var _motionHistory  = [];
+var _livenessScore  = 0;
+var _faceDetector   = null;
+var _challenges     = ['Blink slowly', 'Nod your head', 'Look left', 'Look right'];
+var _MOTION_MICRO   = 1.2;   // avg pixel diff for natural micro-movement
+var _MOTION_ACTION  = 7;     // avg pixel diff for deliberate gesture
+var _SCORE_THRESH   = 45;    // liveness score before challenge is issued
+
+function startTrustCamera() {
+  var wrap    = document.getElementById('trust-camera-wrap');
+  var openBtn = document.getElementById('tp-open-btn');
+  var card    = document.getElementById('trust-photo-card');
+  if (!wrap) return;
+
+  _trustState = 'idle'; _livenessScore = 0;
+  _prevFrameData = null; _motionHistory = [];
+
+  navigator.mediaDevices.getUserMedia({
+    video: { facingMode: { ideal: 'user' }, width: { ideal: 640 }, height: { ideal: 640 } }
+  }).then(function(stream) {
+    _trustStream = stream;
+    var video = document.getElementById('trust-video');
+    video.srcObject = stream;
+    wrap.style.display = '';
+    if (openBtn) openBtn.style.display = 'none';
+    if (card)    card.style.display    = 'none';
+    _resetLivenessUI();
+
+    // FaceDetector API — Chrome/Edge only; graceful fallback to skin-tone heuristic
+    if ('FaceDetector' in window) {
+      try { _faceDetector = new FaceDetector({ maxDetectedFaces: 1, fastMode: true }); }
+      catch(e) { _faceDetector = null; }
+    }
+
+    video.addEventListener('loadeddata', function() {
+      _syncOverlay();
+      _trustState   = 'detecting';
+      _trustInterval = setInterval(_liveLoop, 150);
+      // Fallback: show manual capture button if liveness stalls > 25 s
+      _manualTimer = setTimeout(_showFallbackBtn, 25000);
+    }, { once: true });
+
+  }).catch(function() {
+    _showToast('Camera access denied — allow camera permission and try again.', 'error');
+  });
+}
+
+function _syncOverlay() {
+  var video   = document.getElementById('trust-video');
+  var overlay = document.getElementById('trust-overlay');
+  if (!video || !overlay) return;
+  overlay.width  = video.videoWidth  || 640;
+  overlay.height = video.videoHeight || 640;
+}
+
+async function _liveLoop() {
+  var video = document.getElementById('trust-video');
+  if (!video || video.readyState < 2 || _trustState === 'captured') return;
+  var w = video.videoWidth, h = video.videoHeight;
+  if (!w || !h) return;
+
+  // ── 1. Sample frame at ¼ resolution (speed) ───────────────────────────────
+  var canvas = document.getElementById('trust-canvas');
+  var scale  = 0.25;
+  var sw = Math.floor(w * scale), sh = Math.floor(h * scale);
+  canvas.width = sw; canvas.height = sh;
+  var ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(video, 0, 0, sw, sh);
+  var px = ctx.getImageData(0, 0, sw, sh).data;
+
+  // ── 2. Motion score (avg RGB diff per pixel vs previous frame) ────────────
+  var motion = 0;
+  if (_prevFrameData && _prevFrameData.length === px.length) {
+    for (var i = 0; i < px.length; i += 4) {
+      motion += (Math.abs(px[i]   - _prevFrameData[i])
+               + Math.abs(px[i+1] - _prevFrameData[i+1])
+               + Math.abs(px[i+2] - _prevFrameData[i+2])) / 3;
+    }
+    motion /= px.length / 4;
+  }
+  _prevFrameData = new Uint8ClampedArray(px);
+  _motionHistory.push(motion);
+  if (_motionHistory.length > 20) _motionHistory.shift();
+
+  // ── 3. Face detection ─────────────────────────────────────────────────────
+  var hasFace = false;
+  if (_faceDetector) {
+    try { var faces = await _faceDetector.detect(video); hasFace = faces.length > 0; }
+    catch(e) {}
+  }
+  if (!hasFace) hasFace = _skinToneCheck(px, sw, sh);
+
+  // ── 4. Draw oval guide ───────────────────────────────────────────────────
+  _drawOval(hasFace);
+
+  // ── 5. Averages ──────────────────────────────────────────────────────────
+  var avgAll    = _motionHistory.reduce(function(a,b){return a+b;},0) / (_motionHistory.length||1);
+  var recent5   = _motionHistory.slice(-5).reduce(function(a,b){return a+b;},0) / 5;
+
+  // ── 6. State machine ─────────────────────────────────────────────────────
+  if (_trustState === 'detecting') {
+    // Natural micro-motion (breathing, eye movement) accumulates score
+    if (hasFace && avgAll > _MOTION_MICRO)  _livenessScore = Math.min(_livenessScore + 3, 100);
+    else if (hasFace)                        _livenessScore = Math.min(_livenessScore + 1, 100);
+    else                                     _livenessScore = Math.max(_livenessScore - 1, 0);
+
+    _setStatus(hasFace ? '✓ Face detected — hold still…' : '🔍 Looking for face…', hasFace);
+    _setBarLabel(hasFace ? 'Analyzing liveness…' : 'Position your face in the oval');
+    _setBar(_livenessScore);
+
+    if (_livenessScore >= _SCORE_THRESH && hasFace) {
+      _trustState = 'challenging';
+      var ch = _challenges[Math.floor(Math.random() * _challenges.length)];
+      _showChallenge('👉 ' + ch);
+      _setStatus('Challenge: ' + ch, true);
+      _setBarLabel('Perform the action to confirm you\'re live');
+    }
+
+  } else if (_trustState === 'challenging') {
+    // Need a motion spike — deliberate head/face action
+    if (recent5 > _MOTION_ACTION) {
+      _trustState = 'captured';
+      clearInterval(_trustInterval); clearTimeout(_manualTimer);
+      _setBar(100); _setBarLabel('✓ Liveness confirmed!');
+      _setStatus('✓ Live person confirmed — capturing…', true);
+      _hideChallenge();
+      setTimeout(captureTrustPhoto, 700);
+    }
+  }
+}
+
+function _skinToneCheck(px, w, h) {
+  // Sample center 50% of the quarter-resolution frame for skin-tone pixels
+  var x0 = Math.floor(w*0.25), y0 = Math.floor(h*0.25);
+  var x1 = Math.floor(w*0.75), y1 = Math.floor(h*0.75);
+  var skin = 0, total = 0;
+  for (var y = y0; y < y1; y++) {
+    for (var x = x0; x < x1; x++) {
+      var i = (y * w + x) * 4;
+      var r = px[i], g = px[i+1], b = px[i+2];
+      // Inclusive range: fair → dark brown (Filipino skin tones)
+      if (r > 60 && g > 25 && b > 10 && r > b && r > g * 0.75 && r - b > 10) skin++;
+      total++;
+    }
+  }
+  return total > 0 && skin / total > 0.04;
+}
+
+function _drawOval(hasFace) {
+  var ov = document.getElementById('trust-overlay');
+  if (!ov) return;
+  var ctx = ov.getContext('2d');
+  var ow = ov.width, oh = ov.height;
+  ctx.clearRect(0, 0, ow, oh);
+  var cx = ow/2, cy = oh/2, rx = ow*0.32, ry = oh*0.42;
+
+  // Darken area outside oval
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.38)';
+  ctx.fillRect(0, 0, ow, oh);
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+
+  // Oval border
+  ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI*2);
+  ctx.strokeStyle = hasFace ? '#34D399' : 'rgba(255,255,255,0.55)';
+  ctx.lineWidth   = hasFace ? 3.5 : 2;
+  ctx.stroke();
+
+  // Corner brackets when face found
+  if (hasFace) {
+    var x = cx-rx, y = cy-ry, x2 = cx+rx, y2 = cy+ry, cs = 18;
+    ctx.strokeStyle = '#34D399'; ctx.lineWidth = 3;
+    [[x,y+cs,x,y,x+cs,y],[x2-cs,y,x2,y,x2,y+cs],
+     [x,y2-cs,x,y2,x+cs,y2],[x2-cs,y2,x2,y2,x2,y2-cs]].forEach(function(p){
+      ctx.beginPath(); ctx.moveTo(p[0],p[1]); ctx.lineTo(p[2],p[3]); ctx.lineTo(p[4],p[5]); ctx.stroke();
+    });
+  }
+}
+
+function _setStatus(txt, ok) {
+  var el = document.getElementById('trust-status');
+  if (!el) return;
+  el.textContent = txt;
+  el.className = 'trust-status ' + (ok ? 'trust-status-ok' : 'trust-status-detecting');
+}
+function _setBar(pct) {
+  var el = document.getElementById('trust-live-bar');
+  if (el) el.style.width = Math.min(pct, 100) + '%';
+}
+function _setBarLabel(txt) {
+  var el = document.getElementById('trust-bar-label');
+  if (el) el.textContent = txt;
+}
+function _showChallenge(txt) {
+  var el = document.getElementById('trust-challenge');
+  if (!el) return;
+  el.textContent = txt; el.style.visibility = '';
+  el.classList.add('trust-challenge-pulse');
+}
+function _hideChallenge() {
+  var el = document.getElementById('trust-challenge');
+  if (el) { el.style.visibility = 'hidden'; el.classList.remove('trust-challenge-pulse'); }
+}
+function _resetLivenessUI() {
+  _setStatus('🔍 Position your face in the oval…', false);
+  _setBar(0); _setBarLabel('Liveness scan starting…'); _hideChallenge();
+}
+function _showFallbackBtn() {
+  if (_trustState === 'captured') return;
+  var ctrl = document.querySelector('.trust-camera-controls');
+  if (!ctrl) return;
+  var btn = document.createElement('button');
+  btn.type='button'; btn.className='tp-capture-btn';
+  btn.textContent='📷 Capture Manually';
+  btn.onclick = function(){
+    _trustState = 'captured';
+    clearInterval(_trustInterval);
+    captureTrustPhoto();
+  };
+  ctrl.prepend(btn);
+}
+
+function captureTrustPhoto() {
+  var video  = document.getElementById('trust-video');
+  var canvas = document.getElementById('trust-canvas');
+  if (!video || !canvas) return;
+  // Capture at full native resolution
+  canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+
+  canvas.toBlob(function(blob) {
+    if (_trustStream) { _trustStream.getTracks().forEach(function(t){t.stop();}); _trustStream=null; }
+    var fd = new FormData();
+    fd.append('trust_photo', blob, 'capture.jpg');
+    var m = document.cookie.match(/(?:^|;[ ]*)csrf_token=([^;]*)/);
+    var hdrs = m ? {'X-CSRF-Token': decodeURIComponent(m[1])} : {};
+
+    fetch('/profile/trust-photo', {method:'POST', headers:hdrs, body:fd})
+      .then(function(r){return r.text();})
+      .then(function(html){
+        var flash = document.getElementById('flash');
+        if (flash) { flash.innerHTML = html; setTimeout(function(){flash.innerHTML='';}, 3500); }
+        document.getElementById('trust-camera-wrap').style.display = 'none';
+        var ob = document.getElementById('tp-open-btn');   if (ob) ob.style.display = '';
+        var cd = document.getElementById('trust-photo-card'); if (cd) cd.style.display = '';
+      })
+      .catch(function(){ _showToast('Upload failed — please try again', 'error'); });
+  }, 'image/jpeg', 0.92);
+}
+
+function cancelTrustCamera() {
+  clearInterval(_trustInterval); clearTimeout(_manualTimer);
+  if (_trustStream) { _trustStream.getTracks().forEach(function(t){t.stop();}); _trustStream=null; }
+  _trustState = 'idle';
+  document.getElementById('trust-camera-wrap').style.display = 'none';
+  var ob = document.getElementById('tp-open-btn');    if (ob) ob.style.display = '';
+  var cd = document.getElementById('trust-photo-card'); if (cd) cd.style.display = '';
+}
+
+/* ── Notification toggle ── */
+(function() {
+  var lbl = document.getElementById('notif-toggle-label');
+  if (!lbl || !('Notification' in window)) return;
+  if (Notification.permission === 'granted') {
+    lbl.textContent = 'On ✓';
+  } else if (Notification.permission === 'denied') {
+    lbl.textContent = 'Blocked';
+  } else {
+    lbl.textContent = 'Off';
+  }
+})();
+
+async function handleNotifToggle() {
+  if (!('Notification' in window) || !('PushManager' in window)) {
+    _showToast('Push notifications are not supported in this browser.', 'error'); return;
+  }
+  var lbl = document.getElementById('notif-toggle-label');
+  if (Notification.permission === 'granted') {
+    // Currently on — unsubscribe
+    await telukaPushUnsubscribe();
+    if (lbl) lbl.textContent = 'Off';
+    _showToast('Notifications turned off.', 'success');
+  } else if (Notification.permission === 'denied') {
+    _showToast('Notifications are blocked — enable them in your browser settings.', 'error');
+  } else {
+    // Ask permission
+    var perm = await Notification.requestPermission();
+    if (perm === 'granted') {
+      var ok = await telukaPushSubscribe();
+      if (lbl) lbl.textContent = ok ? 'On ✓' : 'Off';
+      _showToast(ok ? 'Notifications enabled!' : 'Could not subscribe — try again.', ok ? 'success' : 'error');
+    } else {
+      if (lbl) lbl.textContent = 'Blocked';
+    }
+  }
+}
 
 /* ── PWA ── */
 if ('serviceWorker' in navigator) window.addEventListener('load', function(){ navigator.serviceWorker.register('/static/sw.js'); });

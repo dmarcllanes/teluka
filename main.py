@@ -1,5 +1,7 @@
+import asyncio
 import logging
 import logging.config
+import time as _time
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -39,8 +41,9 @@ from lib.otp_store import (
     get_user_by_identifier, is_email,
 )
 from lib.pin import hash_pin, verify_pin, validate_pin
-from lib.email_sender import send_otp_email, mask_email
-from lib.storage import upload_evidence_photo, upload_unboxing_video
+from lib.email_sender import mask_email
+from lib.jobs import enqueue_send_otp
+from lib.storage import upload_evidence_photo, upload_unboxing_video, upload_avatar, upload_trust_photo
 from core.escrow import cancel_escrow, initiate_escrow, release_escrow
 from core.exceptions import ScamDetected, VerificationFailed
 from core.forensics import analyze_risk
@@ -50,7 +53,13 @@ from lib.phone import normalize_ph_phone, PhoneValidationError
 from lib.session import get_session_user, set_session_user, clear_session
 from lib.middleware import apply_middleware
 from lib.supabase_client import get_supabase_admin
+from lib.cache import (
+    aget as cache_get, aset as cache_set, adelete as cache_del,
+    init_redis, cache,
+    TTL_USER, TTL_TX_LIST, TTL_SELLER, TTL_ACTIVITY, TTL_LANDING,
+)
 from lib.activity import log_event, get_events, format_relative_time
+from lib.push import notify_user
 from schemas.transaction import CreateTransactionRequest, Transaction, TransactionStatus
 from schemas.user import UserProfile
 
@@ -58,6 +67,146 @@ fapp, rt = fast_app(secret_key=cfg.session_secret)
 fapp.mount("/static", StaticFiles(directory="static"), name="static")
 
 logger.info("Teluka starting — env=%s", cfg.env)
+
+
+# ---------------------------------------------------------------------------
+# Startup: connect Redis if configured
+# ---------------------------------------------------------------------------
+
+@fapp.on_event("startup")
+async def _startup():
+    if cfg.redis_url:
+        await init_redis(cfg.redis_url)
+    logger.info("Startup complete workers=ready")
+
+
+# ---------------------------------------------------------------------------
+# PIN brute-force lockout (in-memory per worker, resets on restart)
+# ---------------------------------------------------------------------------
+
+import time as _ptime  # separate alias to avoid shadowing
+
+_pin_fails: dict[str, tuple[int, float]] = {}  # user_id → (count, lockout_until)
+_PIN_MAX_TRIES  = 5
+_PIN_LOCKOUT_S  = 15 * 60   # 15 minutes
+
+
+def _check_pin_lockout(user_id: str) -> str | None:
+    """Returns an error message if locked out, else None."""
+    entry = _pin_fails.get(user_id)
+    if not entry:
+        return None
+    count, until = entry
+    if _ptime.monotonic() < until:
+        mins = max(1, int((until - _ptime.monotonic()) / 60) + 1)
+        return f"Too many wrong PINs. Try again in {mins} minute(s)."
+    return None
+
+
+def _record_pin_fail(user_id: str) -> None:
+    entry = _pin_fails.get(user_id, (0, 0.0))
+    count = entry[0] + 1
+    until = _ptime.monotonic() + _PIN_LOCKOUT_S if count >= _PIN_MAX_TRIES else 0.0
+    _pin_fails[user_id] = (count, until)
+
+
+def _clear_pin_lockout(user_id: str) -> None:
+    _pin_fails.pop(user_id, None)
+
+
+# ---------------------------------------------------------------------------
+# File type validation
+# ---------------------------------------------------------------------------
+
+import io
+_ALLOWED_IMAGE_EXTS  = {".jpg", ".jpeg", ".png", ".webp", ".heic"}
+_ALLOWED_VIDEO_EXTS  = {".mp4", ".mov", ".webm", ".mkv", ".m4v"}
+_ALLOWED_VIDEO_MIMES = {
+    "video/mp4", "video/quicktime", "video/webm",
+    "video/x-matroska", "video/x-msvideo",
+}
+
+
+def _validate_image_file(file_bytes: bytes, filename: str) -> str | None:
+    """Returns error string or None if valid."""
+    ext = ("." + filename.rsplit(".", 1)[-1]).lower() if "." in filename else ""
+    if ext not in _ALLOWED_IMAGE_EXTS:
+        return f"'{filename}' must be an image (JPEG, PNG, WebP)."
+    try:
+        from PIL import Image
+        img = Image.open(io.BytesIO(file_bytes))
+        img.verify()
+    except Exception:
+        return f"'{filename}' is not a valid image file."
+    return None
+
+
+def _validate_video_file(filename: str, content_type: str) -> str | None:
+    ext = ("." + filename.rsplit(".", 1)[-1]).lower() if "." in filename else ""
+    if ext not in _ALLOWED_VIDEO_EXTS:
+        return "Please upload a video file (MP4, MOV, WebM)."
+    mime = (content_type or "").split(";")[0].strip().lower()
+    if mime and mime not in _ALLOWED_VIDEO_MIMES:
+        return "Please upload a video file (MP4, MOV, WebM)."
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Cache helpers
+# ---------------------------------------------------------------------------
+
+async def _get_user(user_id: str) -> dict | None:
+    key = f"user:{user_id}"
+    row = await cache_get(key)
+    if row is None:
+        sb  = await get_supabase_admin()
+        row = (await sb.table("users").select("*").eq("id", user_id).single().execute()).data
+        if row:
+            await cache_set(key, row, TTL_USER)
+    return row
+
+
+async def _get_tx_list(user_id: str) -> list:
+    key = f"txlist:{user_id}"
+    rows = await cache_get(key)
+    if rows is None:
+        sb   = await get_supabase_admin()
+        rows = (
+            await sb.table("transactions")
+            .select("*")
+            .or_(f"buyer_id.eq.{user_id},seller_id.eq.{user_id}")
+            .order("created_at", desc=True)
+            .execute()
+        ).data or []
+        await cache_set(key, rows, TTL_TX_LIST)
+    return rows
+
+
+async def _bust_user(*user_ids: str) -> None:
+    for uid in user_ids:
+        await cache_del(f"user:{uid}")
+
+
+async def _bust_tx_lists(*user_ids: str) -> None:
+    for uid in user_ids:
+        await cache_del(f"txlist:{uid}")
+
+
+# Landing-page HTML cache (module-level, not per-request)
+_landing_html: str | None = None
+_landing_expires: float = 0.0
+
+
+def _parse_location(form) -> tuple[float | None, float | None]:
+    """Extract action_lat / action_lon from a form, return (lat, lon) or (None, None)."""
+    try:
+        lat = form.get("action_lat", "").strip()
+        lon = form.get("action_lon", "").strip()
+        if lat and lon:
+            return float(lat), float(lon)
+    except (ValueError, AttributeError):
+        pass
+    return None, None
 
 
 # ---------------------------------------------------------------------------
@@ -70,12 +219,65 @@ async def health():
 
 
 # ---------------------------------------------------------------------------
+# Web Push
+# ---------------------------------------------------------------------------
+
+@fapp.get("/push/public-key")
+async def push_public_key():
+    return JSONResponse({"key": cfg.vapid_public_key or ""})
+
+
+@fapp.post("/push/subscribe")
+async def push_subscribe(request: Request, session):
+    user_id = get_session_user(session)
+    if not user_id:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401)
+    body = await request.json()
+    endpoint = body.get("endpoint", "")
+    if not endpoint:
+        return JSONResponse({"error": "missing endpoint"}, status_code=400)
+    try:
+        supabase = await get_supabase_admin()
+        await supabase.table("push_subscriptions").upsert(
+            {"user_id": user_id, "endpoint": endpoint, "subscription": body},
+            on_conflict="user_id,endpoint",
+        ).execute()
+        logger.info("Push subscription saved user=%s", user_id)
+    except Exception:
+        logger.exception("push_subscribe failed user=%s", user_id)
+    return JSONResponse({"ok": True})
+
+
+@fapp.post("/push/unsubscribe")
+async def push_unsubscribe(request: Request, session):
+    user_id = get_session_user(session)
+    if not user_id:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401)
+    body = await request.json()
+    endpoint = body.get("endpoint", "")
+    if endpoint:
+        try:
+            supabase = await get_supabase_admin()
+            await supabase.table("push_subscriptions").delete().eq("user_id", user_id).eq("endpoint", endpoint).execute()
+        except Exception:
+            logger.exception("push_unsubscribe failed user=%s", user_id)
+    return JSONResponse({"ok": True})
+
+
+# ---------------------------------------------------------------------------
 # Landing
 # ---------------------------------------------------------------------------
 
 @rt("/")
 def get():
-    return landing_page()
+    global _landing_html, _landing_expires
+    now = _time.monotonic()
+    if _landing_html and now < _landing_expires:
+        return HTMLResponse(_landing_html)
+    html = to_xml(landing_page())
+    _landing_html = html
+    _landing_expires = now + TTL_LANDING
+    return HTMLResponse(html)
 
 
 # ---------------------------------------------------------------------------
@@ -119,7 +321,7 @@ async def post(identifier: str):
         email = user["email"]
         try:
             code = await create_otp(email)
-            sent = await send_otp_email(email, code)
+            sent = await enqueue_send_otp(email, code)
             if not sent:
                 return identifier_form_fragment(error="Failed to send email. Please try again.")
         except ValueError as e:
@@ -149,7 +351,7 @@ async def post(identifier: str):
 
     try:
         code = await create_otp(email)
-        sent = await send_otp_email(email, code)
+        sent = await enqueue_send_otp(email, code)
         if not sent:
             return identifier_form_fragment(error="Failed to send email. Please try again.")
     except ValueError as e:
@@ -162,11 +364,16 @@ async def post(identifier: str):
 
 
 @rt("/register")
-async def post(phone: str, email: str):
+async def post(request: Request, phone: str, email: str):
     """
     Step 2 for new users: phone (already normalised) + email.
     Creates OTP keyed on email, sends it, returns otp_step.
     """
+    form = await request.form()
+    # Honeypot — bots fill this field, humans leave it empty
+    if form.get("email_confirm", ""):
+        return signup_form_fragment(phone=phone, error="Registration failed. Please try again.")
+
     email = email.strip().lower()
 
     if not is_email(email):
@@ -182,7 +389,7 @@ async def post(phone: str, email: str):
 
     try:
         code = await create_otp(email)
-        sent = await send_otp_email(email, code)
+        sent = await enqueue_send_otp(email, code)
         if not sent:
             return signup_form_fragment(phone=phone, error="Failed to send email. Please try again.")
     except ValueError as e:
@@ -201,7 +408,7 @@ async def post(email: str):
     """Re-send OTP to the same email."""
     try:
         code = await create_otp(email)
-        sent = await send_otp_email(email, code)
+        sent = await enqueue_send_otp(email, code)
         if not sent:
             return Div(Div("Failed to send email. Please try again.", cls="toast toast-error"))
     except ValueError as e:
@@ -237,6 +444,8 @@ async def post(request: Request, session):
             # Existing user — log in directly
             user_id    = user["id"]
             user_phone = user["phone"]
+            # Regenerate session to prevent session fixation
+            session.clear()
             set_session_user(session, user_id, user_phone)
         elif phone:
             # New user — go to PIN creation step before creating account
@@ -290,6 +499,8 @@ async def post(phone: str, email: str, pin: str, pin_confirm: str, session):
     try:
         hashed    = hash_pin(pin)
         user_id   = await get_or_create_user(phone, email, pin_hash=hashed)
+        # Regenerate session to prevent session fixation
+        session.clear()
         set_session_user(session, user_id, phone)
     except Exception:
         logger.exception("set-pin: user creation failed")
@@ -342,27 +553,15 @@ async def get(session):
     if not user_id:
         return RedirectResponse("/login", status_code=303)
 
-    supabase = await get_supabase_admin()
-
-    user_row = (
-        await supabase.table("users").select("*").eq("id", user_id).single().execute()
-    ).data
+    user_row, tx_rows = await asyncio.gather(
+        _get_user(user_id),
+        _get_tx_list(user_id),
+    )
     if not user_row:
         session.clear()
         return RedirectResponse("/login", status_code=303)
 
-    user = UserProfile(**user_row)
-
-    tx_rows = (
-        await supabase.table("transactions")
-        .select("*")
-        .or_(f"buyer_id.eq.{user_id},seller_id.eq.{user_id}")
-        .order("created_at", desc=True)
-        .execute()
-    ).data or []
-
-    transactions = [Transaction(**r) for r in tx_rows]
-    return dashboard_page(user, transactions)
+    return dashboard_page(UserProfile(**user_row), [Transaction(**r) for r in tx_rows])
 
 
 # ---------------------------------------------------------------------------
@@ -375,26 +574,15 @@ async def get(session):
     if not user_id:
         return RedirectResponse("/login", status_code=303)
 
-    supabase = await get_supabase_admin()
-
-    user_row = (
-        await supabase.table("users").select("*").eq("id", user_id).single().execute()
-    ).data
+    user_row, tx_rows = await asyncio.gather(
+        _get_user(user_id),
+        _get_tx_list(user_id),
+    )
     if not user_row:
         session.clear()
         return RedirectResponse("/login", status_code=303)
 
-    user = UserProfile(**user_row)
-
-    tx_rows = (
-        await supabase.table("transactions")
-        .select("*")
-        .or_(f"buyer_id.eq.{user_id},seller_id.eq.{user_id}")
-        .execute()
-    ).data or []
-
-    transactions = [Transaction(**r) for r in tx_rows]
-    return profile_page(user, transactions)
+    return profile_page(UserProfile(**user_row), [Transaction(**r) for r in tx_rows])
 
 
 # ─── Profile edit ─────────────────────────────────────────────────────────────
@@ -410,6 +598,7 @@ async def post(request: Request, session):
 
     supabase = await get_supabase_admin()
     await supabase.table("users").update({"email": email or None}).eq("id", user_id).execute()
+    await _bust_user(user_id)
     return Response(status_code=204)
 
 
@@ -425,6 +614,7 @@ async def post(request: Request, session):
     # In production: call PayMongo / GCash API to send ₱1. For now: store pending number.
     supabase = await get_supabase_admin()
     await supabase.table("users").update({"gcash_pending_number": number}).eq("id", user_id).execute()
+    await _bust_user(user_id)
     return verify_pending_html("gcash", "GCash", "💚")
 
 
@@ -439,6 +629,7 @@ async def post(request: Request, session):
         "gcash_verified": True,
         "kyc_status": "verified",
     }).eq("id", user_id).execute()
+    await _bust_user(user_id)
     return verify_done_html("GCash", "💚")
 
 
@@ -451,6 +642,7 @@ async def post(request: Request, session):
     number = form.get("maya_number", "").strip()
     supabase = await get_supabase_admin()
     await supabase.table("users").update({"maya_pending_number": number}).eq("id", user_id).execute()
+    await _bust_user(user_id)
     return verify_pending_html("maya", "Maya", "💜")
 
 
@@ -464,7 +656,108 @@ async def post(request: Request, session):
         "maya_verified": True,
         "kyc_status": "verified",
     }).eq("id", user_id).execute()
+    await _bust_user(user_id)
     return verify_done_html("Maya", "💜")
+
+
+# ─── Avatar upload ────────────────────────────────────────────────────────────
+
+@rt("/profile/avatar")
+async def post(request: Request, session):
+    user_id = get_session_user(session)
+    if not user_id:
+        return Response(status_code=401)
+
+    form = await request.form()
+    photo = form.get("avatar")
+    if not photo or not getattr(photo, "filename", None):
+        return Div(Div("Please select an image file.", cls="toast toast-error"))
+
+    file_bytes = await photo.read()
+    img_err = _validate_image_file(file_bytes, photo.filename)
+    if img_err:
+        return Div(Div(img_err, cls="toast toast-error"))
+
+    try:
+        url = await upload_avatar(file_bytes, user_id)
+    except ValueError as e:
+        return Div(Div(str(e), cls="toast toast-error"))
+    except Exception:
+        logger.exception("Avatar upload failed user=%s", user_id)
+        return Div(Div("Upload failed. Please try again.", cls="toast toast-error"))
+
+    supabase = await get_supabase_admin()
+    await supabase.table("users").update({"avatar_url": url}).eq("id", user_id).execute()
+    await _bust_user(user_id)
+    logger.info("Avatar saved user=%s", user_id)
+    return Div(
+        Div("Profile photo updated!", cls="toast toast-success"),
+        # Update the avatar image in-place without page reload
+        Script(f"""
+(function(){{
+  var img = document.getElementById('avatar-img');
+  var init = document.getElementById('avatar-initials');
+  var url = {repr(url)};
+  if (img) {{ img.src = url + '?t=' + Date.now(); }}
+  else if (init) {{
+    var av = init.parentElement;
+    init.remove();
+    var el = document.createElement('img');
+    el.id = 'avatar-img'; el.src = url; el.alt = 'Avatar';
+    el.className = 'avatar-photo';
+    av.prepend(el);
+  }}
+}})();
+        """),
+    )
+
+
+# ─── Real-time trust photo ────────────────────────────────────────────────────
+
+@rt("/profile/trust-photo")
+async def post(request: Request, session):
+    user_id = get_session_user(session)
+    if not user_id:
+        return Response(status_code=401)
+
+    form = await request.form()
+    photo = form.get("trust_photo")
+    if not photo or not getattr(photo, "filename", None):
+        return Div(Div("No photo received.", cls="toast toast-error"))
+
+    file_bytes = await photo.read()
+    img_err = _validate_image_file(file_bytes, photo.filename or "capture.jpg")
+    if img_err:
+        return Div(Div(img_err, cls="toast toast-error"))
+
+    try:
+        url = await upload_trust_photo(file_bytes, user_id)
+    except ValueError as e:
+        return Div(Div(str(e), cls="toast toast-error"))
+    except Exception:
+        logger.exception("Trust photo upload failed user=%s", user_id)
+        return Div(Div("Upload failed. Please try again.", cls="toast toast-error"))
+
+    from datetime import timezone
+    taken_at = _dt.now(timezone.utc).isoformat()
+    supabase = await get_supabase_admin()
+    await supabase.table("users").update({
+        "trust_photo_url": url,
+        "trust_photo_taken_at": taken_at,
+    }).eq("id", user_id).execute()
+    await _bust_user(user_id)
+    logger.info("Trust photo saved user=%s", user_id)
+    return Div(
+        Div("Trust photo saved! Your profile now shows extra verification.", cls="toast toast-success"),
+        Script(f"""
+(function(){{
+  var card = document.getElementById('trust-photo-card');
+  if (card) card.innerHTML = '<img src="{url}" class="trust-photo-result" alt="Trust photo">'
+    + '<p class="trust-photo-taken">📸 Taken just now · Visible to deal counterparties</p>'
+    + '<button class="tp-retake-btn" onclick="startTrustCamera()">Retake</button>';
+}})();
+        """),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -490,9 +783,14 @@ async def post(phone: str, session):
     if self_row and self_row.get("phone") == normalised:
         return seller_blocked(normalised, "You cannot create a deal with yourself.")
 
-    seller_row = (
-        await supabase.table("users").select("*").eq("phone", normalised).single().execute()
-    ).data
+    seller_key = f"seller:{normalised}"
+    seller_row = cache.get(seller_key)
+    if seller_row is None:
+        seller_row = (
+            await supabase.table("users").select("*").eq("phone", normalised).single().execute()
+        ).data
+        if seller_row:
+            cache.set(seller_key, seller_row, TTL_SELLER)
     if not seller_row:
         return seller_not_found(normalised)
 
@@ -521,13 +819,20 @@ def get(session):
 
 
 @rt("/transactions/create")
-async def post(item_description: str, amount_php: float, seller_id: str, session,
-               protection_plan: str = "basic"):
+async def post(request: Request, session, item_description: str = "", amount_php: float = 0,
+               seller_id: str = "", protection_plan: str = "basic"):
     buyer_id = get_session_user(session)
     if not buyer_id:
         return Div(Div("Session expired.", cls="toast toast-error"))
 
-    amount_centavos = int(float(amount_php) * 100)
+    form = await request.form()
+    item_description = item_description or str(form.get("item_description", "")).strip()
+    amount_php       = amount_php or float(form.get("amount_php", 0) or 0)
+    seller_id        = seller_id  or str(form.get("seller_id", "")).strip()
+    protection_plan  = str(form.get("protection_plan", protection_plan)).strip()
+    lat, lon         = _parse_location(form)
+
+    amount_centavos = int(amount_php * 100)
     plan = get_plan(protection_plan) if protection_plan in PLANS else get_tier(amount_centavos)
     fee  = plan.fee_centavos(amount_centavos)
 
@@ -548,12 +853,17 @@ async def post(item_description: str, amount_php: float, seller_id: str, session
 
     await log_event(tx_id, "deal_created",
         f'Deal for \"{item_description}\" created \u00b7 \u20b1{amount_centavos / 100:,.0f}',
-        actor_id=buyer_id)
+        actor_id=buyer_id, lat=lat, lon=lon)
     await log_event(tx_id, "tier_upgraded",
         f"{plan.badge_icon} {plan.name} protection active \u00b7 {plan.min_photos} photos, {plan.review_hours}h review"
         + (f" \u00b7 Service fee: \u20b1{fee / 100:,.2f}" if fee else " \u00b7 No service fee"),
         icon=plan.badge_icon)
 
+    await _bust_tx_lists(buyer_id, seller_id)
+    # Notify seller of new deal
+    asyncio.create_task(notify_user(seller_id, "New Deal Request 🤝",
+        f"A buyer wants to create a protected deal for ₱{amount_centavos/100:,.0f}. Tap to review.",
+        f"/transactions/{tx_id}"))
     logger.info("Transaction created tx=%s buyer=%s", tx_id, buyer_id)
     return Div(
         Div("Deal created!", cls="toast toast-success"),
@@ -580,8 +890,10 @@ async def get(tx_id: str, session):
 
     tx = Transaction(**row)
 
-    buyer_row  = (await supabase.table("users").select("*").eq("id", tx.buyer_id).single().execute()).data
-    seller_row = (await supabase.table("users").select("*").eq("id", tx.seller_id).single().execute()).data
+    buyer_row, seller_row = await asyncio.gather(
+        _get_user(tx.buyer_id),
+        _get_user(tx.seller_id),
+    )
     buyer  = UserProfile(**buyer_row)  if buyer_row  else None
     seller = UserProfile(**seller_row) if seller_row else None
 
@@ -593,9 +905,13 @@ async def get(tx_id: str, session):
 # ---------------------------------------------------------------------------
 
 @rt("/transactions/pay")
-async def post(tx_id: str, session):
-    if not get_session_user(session):
+async def post(request: Request, session):
+    user_id = get_session_user(session)
+    if not user_id:
         return Div(Div("Session expired.", cls="toast toast-error"))
+    form  = await request.form()
+    tx_id = str(form.get("tx_id", "")).strip()
+    lat, lon = _parse_location(form)
     supabase = await get_supabase_admin()
     row = (
         await supabase.table("transactions").select("*").eq("id", tx_id).single().execute()
@@ -603,12 +919,15 @@ async def post(tx_id: str, session):
     if not row:
         return Div(Div("Deal not found.", cls="toast toast-error"))
     tx = Transaction(**row)
-    user_id = get_session_user(session)
     try:
         await initiate_escrow(tx)
+        await _bust_tx_lists(tx.buyer_id, tx.seller_id)
         await log_event(tx_id, "payment_held",
             f"₱{tx.amount_centavos / 100:,.0f} held securely — seller cannot access funds until you confirm",
-            actor_id=user_id)
+            actor_id=user_id, lat=lat, lon=lon)
+        asyncio.create_task(notify_user(tx.seller_id, "Payment Received 🔒",
+            f"₱{tx.amount_centavos/100:,.0f} is now held in escrow. Upload your evidence photos to proceed.",
+            f"/transactions/{tx_id}"))
         return Div(
             Div("Funds held securely!", cls="toast toast-success"),
             Script("setTimeout(() => location.reload(), 1200);"),
@@ -648,6 +967,9 @@ async def post(request: Request, session):
         file_bytes = await photo_file.read()
         if len(file_bytes) > 10 * 1024 * 1024:
             return Div(Div(f"Photo '{photo_file.filename}' exceeds 10 MB limit.", cls="toast toast-error"))
+        img_err = _validate_image_file(file_bytes, photo_file.filename)
+        if img_err:
+            return Div(Div(img_err, cls="toast toast-error"))
         if not cfg.mock_uploads:
             try:
                 result = verify_photo_liveness(file_bytes, tx.created_at, tx.amount_centavos)
@@ -672,9 +994,14 @@ async def post(request: Request, session):
     }).eq("id", tx_id).execute()
 
     user_id = get_session_user(session)
+    lat, lon = _parse_location(form)
     await log_event(tx_id, "evidence_submitted",
         f"{len(new_urls)} photo(s) uploaded · {len(all_urls)} total — liveness verified ✓",
-        actor_id=user_id)
+        actor_id=user_id, lat=lat, lon=lon)
+    await _bust_tx_lists(tx.buyer_id, tx.seller_id)
+    asyncio.create_task(notify_user(tx.buyer_id, "Evidence Photos Uploaded 📸",
+        "The seller submitted evidence photos. Review them and wait for shipment.",
+        f"/transactions/{tx_id}"))
     logger.info("Evidence submitted tx=%s photos=%d", tx_id, len(all_urls))
     return Div(
         Div("Evidence submitted!", cls="toast toast-success"),
@@ -700,6 +1027,9 @@ async def post(request: Request, session):
     file_bytes = await video.read()
     if len(file_bytes) > 100 * 1024 * 1024:
         return Div(Div("Video exceeds 100 MB limit.", cls="toast toast-error"))
+    vid_err = _validate_video_file(video.filename, video.content_type or "")
+    if vid_err:
+        return Div(Div(vid_err, cls="toast toast-error"))
 
     try:
         url = await upload_unboxing_video(file_bytes, video.filename, tx_id)
@@ -718,9 +1048,18 @@ async def post(request: Request, session):
     }).eq("id", tx_id).execute()
 
     user_id = get_session_user(session)
+    lat, lon = _parse_location(form)
     await log_event(tx_id, "unboxing_uploaded",
         "Unboxing video recorded — buyer can now release payment to seller",
-        actor_id=user_id)
+        actor_id=user_id, lat=lat, lon=lon)
+    await _bust_tx_lists(tx.buyer_id, tx.seller_id)
+    # Need tx object for seller_id
+    supabase2 = await get_supabase_admin()
+    tx_row = (await supabase2.table("transactions").select("seller_id,amount_centavos").eq("id", tx_id).single().execute()).data
+    if tx_row:
+        asyncio.create_task(notify_user(tx_row["seller_id"], "Unboxing Video Uploaded 🎥",
+            "The buyer recorded their unboxing. Payment release is pending.",
+            f"/transactions/{tx_id}"))
     logger.info("Unboxing video uploaded tx=%s", tx_id)
     return Div(
         Div("Video uploaded! You can now release the payment.", cls="toast toast-success"),
@@ -729,18 +1068,28 @@ async def post(request: Request, session):
 
 
 @rt("/transactions/ship")
-async def post(tx_id: str, tracking_id: str, session):
-    if not get_session_user(session):
+async def post(request: Request, session):
+    user_id = get_session_user(session)
+    if not user_id:
         return Div(Div("Session expired.", cls="toast toast-error"))
+    form       = await request.form()
+    tx_id      = str(form.get("tx_id", "")).strip()
+    tracking_id = str(form.get("tracking_id", "")).strip()
+    lat, lon   = _parse_location(form)
     supabase = await get_supabase_admin()
+    tx_row = (await supabase.table("transactions").select("buyer_id,amount_centavos").eq("id", tx_id).single().execute()).data
     await supabase.table("transactions").update({
         "delivery_tracking_id": tracking_id,
         "status": TransactionStatus.IN_TRANSIT,
     }).eq("id", tx_id).execute()
-    user_id = get_session_user(session)
     await log_event(tx_id, "item_shipped",
         f"Item shipped · Tracking: {tracking_id}",
-        actor_id=user_id)
+        actor_id=user_id, lat=lat, lon=lon)
+    await _bust_tx_lists(user_id)
+    if tx_row:
+        asyncio.create_task(notify_user(tx_row["buyer_id"], "Item Shipped 🚚",
+            f"Your item is on the way! Tracking: {tracking_id}. Record your unboxing video on delivery.",
+            f"/transactions/{tx_id}"))
     logger.info("Shipment added tx=%s tracking=%s", tx_id, tracking_id)
     return Div(
         Div("Marked as shipped!", cls="toast toast-success"),
@@ -762,6 +1111,11 @@ async def post(request: Request, session):
 
     supabase = await get_supabase_admin()
 
+    # Check PIN lockout before any DB query
+    lockout_msg = _check_pin_lockout(user_id)
+    if lockout_msg:
+        return Div(Div(lockout_msg, cls="toast toast-error"))
+
     # Verify PIN if the user has one set
     user_row = (
         await supabase.table("users").select("pin_hash").eq("id", user_id).single().execute()
@@ -770,7 +1124,11 @@ async def post(request: Request, session):
         if not pin:
             return Div(Div("Please enter your PIN to confirm this action.", cls="toast toast-error"))
         if not verify_pin(pin, user_row["pin_hash"]):
-            return Div(Div("Incorrect PIN. Please try again.", cls="toast toast-error"))
+            _record_pin_fail(user_id)
+            lockout_msg = _check_pin_lockout(user_id)
+            err = lockout_msg or "Incorrect PIN. Please try again."
+            return Div(Div(err, cls="toast toast-error"))
+        _clear_pin_lockout(user_id)
 
     row = (
         await supabase.table("transactions").select("*").eq("id", tx_id).single().execute()
@@ -787,11 +1145,16 @@ async def post(request: Request, session):
         )
     except VerificationFailed as e:
         return Div(Div(str(e), cls="toast toast-error"))
+    lat, lon = _parse_location(form)
     try:
         await release_escrow(tx)
+        await _bust_tx_lists(tx.buyer_id, tx.seller_id)
         await log_event(tx_id, "payment_released",
             f"₱{tx.amount_centavos / 100:,.0f} released to seller — deal complete",
-            actor_id=user_id)
+            actor_id=user_id, lat=lat, lon=lon)
+        asyncio.create_task(notify_user(tx.seller_id, "Payment Released ✅",
+            f"₱{tx.amount_centavos/100:,.0f} has been released to you. Deal complete!",
+            f"/transactions/{tx_id}"))
         return Div(
             Div("Payment released to seller!", cls="toast toast-success"),
             Script("setTimeout(() => location.reload(), 1200);"),
@@ -802,17 +1165,30 @@ async def post(request: Request, session):
 
 
 @rt("/transactions/dispute")
-async def post(tx_id: str, reason: str, session):
-    if not get_session_user(session):
+async def post(request: Request, session):
+    user_id = get_session_user(session)
+    if not user_id:
         return Div(Div("Session expired.", cls="toast toast-error"))
+    form   = await request.form()
+    tx_id  = str(form.get("tx_id", "")).strip()
+    reason = str(form.get("reason", "")).strip()[:500]
+    lat, lon = _parse_location(form)
+    if len(reason) < 10:
+        return Div(Div("Please describe the dispute in at least 10 characters.", cls="toast toast-error"))
     supabase = await get_supabase_admin()
     await supabase.table("transactions").update({
         "status": TransactionStatus.DISPUTED,
     }).eq("id", tx_id).execute()
-    user_id = get_session_user(session)
+    tx_row = (await supabase.table("transactions").select("buyer_id,seller_id").eq("id", tx_id).single().execute()).data
     await log_event(tx_id, "dispute_raised",
         f'Dispute opened: \"{reason[:120]}\" — evidence under review',
-        actor_id=user_id)
+        actor_id=user_id, lat=lat, lon=lon)
+    await _bust_tx_lists(user_id)
+    if tx_row:
+        other_id = tx_row["seller_id"] if user_id == tx_row["buyer_id"] else tx_row["buyer_id"]
+        asyncio.create_task(notify_user(other_id, "Dispute Raised ⚠️",
+            "A dispute has been opened on your deal. Teluka will review the evidence.",
+            f"/transactions/{tx_id}"))
     logger.info("Dispute raised tx=%s reason=%r", tx_id, reason[:100])
     return Div(
         Div("Dispute raised. Our team will review the evidence.", cls="toast toast-warn"),
@@ -834,6 +1210,7 @@ async def post(tx_id: str, session):
     user_id = get_session_user(session)
     try:
         await cancel_escrow(tx)
+        await _bust_tx_lists(tx.buyer_id, tx.seller_id)
         event_type = "deal_refunded" if tx.payment_intent_id else "deal_cancelled"
         desc = "Funds refunded to buyer" if tx.payment_intent_id else "Deal cancelled before payment"
         await log_event(tx_id, event_type, desc, actor_id=user_id)
@@ -857,19 +1234,26 @@ async def get(tx_id: str, session):
     if not user_id:
         return Div()
 
-    # Security: only buyer/seller may view
-    supabase = await get_supabase_admin()
-    row = (
-        await supabase.table("transactions")
-        .select("buyer_id,seller_id")
-        .eq("id", tx_id)
-        .single()
-        .execute()
-    ).data
+    act_key = f"activity:{tx_id}"
+    cached  = cache.get(act_key)
+    if cached is None:
+        supabase = await get_supabase_admin()
+        row = (
+            await supabase.table("transactions")
+            .select("buyer_id,seller_id")
+            .eq("id", tx_id)
+            .single()
+            .execute()
+        ).data
+        events = await get_events(tx_id) if row else []
+        cached = {"row": row, "events": events}
+        cache.set(act_key, cached, TTL_ACTIVITY)
+
+    row    = cached["row"]
+    events = cached["events"]
+
     if not row or user_id not in (row["buyer_id"], row["seller_id"]):
         return Div()
-
-    events = await get_events(tx_id)
     if not events:
         return Div(cls="activity-empty")("No activity yet.")
 

@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, constr
 
 
 class TransactionStatus(StrEnum):
@@ -50,9 +50,9 @@ class Transaction(BaseModel):
 class CreateTransactionRequest(BaseModel):
     buyer_id: str
     seller_id: str
-    item_description: str
+    item_description: str = Field(min_length=3, max_length=300)
     amount_centavos: int
-    protection_plan: str = "basic"
+    protection_plan: str = Field(default="basic", max_length=20)
     platform_fee_centavos: int = 0
 
     @field_validator("amount_centavos")
@@ -60,6 +60,9 @@ class CreateTransactionRequest(BaseModel):
     def must_be_positive(cls, v: int) -> int:
         if v <= 0:
             raise ValueError("amount_centavos must be positive")
+        # Cap at ₱500,000 (50_000_000 centavos) — flag anything above for review
+        if v > 50_000_000:
+            raise ValueError("amount exceeds maximum transaction limit")
         return v
 
 

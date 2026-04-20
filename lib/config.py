@@ -85,6 +85,19 @@ class Config:
         # ── Supabase Storage ──────────────────────────────────────────────────
         self.storage_bucket: str = _optional("STORAGE_BUCKET", "evidence")
 
+        # ── Redis (optional — Upstash free tier works well) ───────────────────
+        self.redis_url: str = _optional("REDIS_URL")
+
+        # ── Web Push (VAPID) ─────────────────────────────────────────────────
+        # Generate once with: python -c "from py_vapid import Vapid; v=Vapid(); v.generate_keys(); print(v.private_pem().decode()); print(v.public_key.decode())"
+        self.vapid_private_key: str = _optional("VAPID_PRIVATE_KEY")
+        self.vapid_public_key: str  = _optional("VAPID_PUBLIC_KEY")
+        self.vapid_email: str       = _optional("VAPID_EMAIL", "admin@teluka.dev")
+
+        # ── Allowed hosts (CSRF + TrustedHost) ───────────────────────────────
+        _hosts = _optional("ALLOWED_HOSTS", "localhost,127.0.0.1")
+        self.allowed_hosts: set[str] = {h.strip() for h in _hosts.split(",") if h.strip()}
+
         # ── Runtime ───────────────────────────────────────────────────────────
         self.env: str = _optional("ENV", "development")
         self.is_production: bool = self.env == "production"

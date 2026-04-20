@@ -38,6 +38,8 @@ class ActivityEvent(TypedDict):
     description: str
     icon: str
     created_at: str   # ISO-8601
+    actor_lat: float | None
+    actor_lon: float | None
 
 
 # ── Event type catalogue ──────────────────────────────────────────────────────
@@ -67,6 +69,8 @@ async def log_event(
     actor_id: str | None = None,
     icon: str | None = None,
     title: str | None = None,
+    lat: float | None = None,
+    lon: float | None = None,
 ) -> None:
     """Append one event to the activity log for a transaction."""
     from lib.config import get_config
@@ -82,6 +86,8 @@ async def log_event(
         "description": description,
         "icon":        icon or _icon,
         "created_at":  datetime.now(timezone.utc).isoformat(),
+        "actor_lat":   lat,
+        "actor_lon":   lon,
     }
 
     if cfg.mock_payments:

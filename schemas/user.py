@@ -1,3 +1,4 @@
+from datetime import datetime
 from enum import StrEnum
 from pydantic import BaseModel, field_validator
 
@@ -29,6 +30,9 @@ class UserProfile(BaseModel):
     total_transactions: int = 0
     scam_reports: int = 0
     pin_hash: str | None = None
+    avatar_url: str | None = None
+    trust_photo_url: str | None = None
+    trust_photo_taken_at: datetime | None = None
 
     @field_validator("trust_score")
     @classmethod

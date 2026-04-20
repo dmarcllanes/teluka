@@ -20,6 +20,7 @@ def landing_page() -> FT:
             _cta(),
             _footer(),
             _pwa_install_banner(),
+            Script(src="/static/js/app.js"),
             _scripts(),
         ),
     )

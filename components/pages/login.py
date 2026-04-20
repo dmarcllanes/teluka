@@ -271,6 +271,15 @@ def _signup_form(phone: str = "", email: str = "", error: str | None = None) -> 
             ),
             P("OTP codes are always sent here.", cls="form-hint"),
         ),
+        # Honeypot — bots fill this, humans don't see it
+        Input(
+            type="text",
+            name="email_confirm",
+            tabindex="-1",
+            autocomplete="off",
+            style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;",
+            aria_hidden="true",
+        ),
         Div(
             Div(error, cls="toast toast-error") if error else None,
             style="margin-bottom:16px" if error else "",
@@ -739,6 +748,7 @@ def _head() -> FT:
           }
         """),
         Script(src="https://unpkg.com/htmx.org@1.9.12"),
+        Script(src="/static/js/app.js"),
         Script(
             "(function(){var t=localStorage.getItem('teluka-theme')||"
             "(window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark');"
@@ -816,4 +826,26 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/static/sw.js');
   });
 }
+
+/* Cursor-following glow on the auth card (desktop only) */
+(function(){
+  if (!window.matchMedia('(hover: hover)').matches) return;
+  function attach() {
+    var card = document.querySelector('.auth-card');
+    if (!card) return;
+    card.addEventListener('mousemove', function(e) {
+      var r = card.getBoundingClientRect();
+      var x = ((e.clientX - r.left) / r.width  * 100).toFixed(1) + '%';
+      var y = ((e.clientY - r.top)  / r.height * 100).toFixed(1) + '%';
+      card.style.setProperty('--mx', x);
+      card.style.setProperty('--my', y);
+    });
+    card.addEventListener('mouseleave', function() {
+      card.style.setProperty('--mx', '50%');
+      card.style.setProperty('--my', '50%');
+    });
+  }
+  attach();
+  document.body.addEventListener('htmx:afterSwap', attach);
+})();
 """)
