@@ -91,6 +91,10 @@
 }
 
 /* ── Phone input row ── */
+.nd-phone-row {
+  display: flex; align-items: stretch; gap: 8px;
+}
+.nd-phone-row .nd-phone-wrap { flex: 1; }
 .nd-phone-wrap {
   display: flex; align-items: center;
   border: 1px solid var(--border-strong);

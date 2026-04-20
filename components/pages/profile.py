@@ -4,6 +4,114 @@ from schemas.transaction import Transaction, TransactionStatus
 from schemas.user import UserProfile, KYCStatus, TrustLevel
 
 
+def change_pin_page(has_pin: bool) -> FT:
+    title = "Change PIN" if has_pin else "Set Security PIN"
+    back_href = "/profile"
+    return Html(
+        Head(
+            Meta(charset="UTF-8"),
+            Meta(name="viewport", content="width=device-width, initial-scale=1"),
+            Title(f"{title} — Teluka"),
+            Link(rel="preconnect", href="https://fonts.googleapis.com"),
+            Link(rel="preconnect", href="https://fonts.gstatic.com", crossorigin=""),
+            Link(href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap", rel="stylesheet"),
+            Link(rel="stylesheet", href="/static/css/app.css"),
+            Link(rel="stylesheet", href="/static/css/dashboard.css"),
+            Script(src="https://unpkg.com/htmx.org@1.9.12"),
+            Script(src="/static/js/app.js"),
+            Script("(function(){var t=localStorage.getItem('teluka-theme')||(window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark');document.documentElement.setAttribute('data-theme',t);})();"),
+        ),
+        Body(
+            Div(cls="app-layout")(
+                Div(cls="dash-body")(
+                    Header(cls="app-header")(
+                        A("← Back", href=back_href, cls="app-header-back"),
+                        Div(title, cls="app-header-logo"),
+                        Div(cls="app-header-actions"),
+                    ),
+                    Main(cls="app-main")(
+                        Div(cls="app-content", style="max-width:480px;margin:0 auto;padding:20px 16px")(
+                            Div(cls="profile-card")(
+                                Div(cls="pf-card-header")(
+                                    Div(cls="pf-card-icon-wrap")(_icon_lock()),
+                                    Div(cls="pf-card-header-text")(
+                                        Div(title, cls="profile-card-title"),
+                                        Div(
+                                            "Enter your current PIN and a new 4-digit PIN." if has_pin
+                                            else "Set a 4-digit PIN required to release payments.",
+                                            cls="pf-card-sub",
+                                        ),
+                                    ),
+                                ),
+                                Div(id="pin-feedback"),
+                                Form(
+                                    hx_post="/profile/change-pin",
+                                    hx_target="#pin-feedback",
+                                    hx_swap="innerHTML",
+                                    hx_on__htmx_after_request="onPinSaved(event)",
+                                    cls="pf-form",
+                                )(
+                                    *(
+                                        [
+                                            Div(cls="pf-field")(
+                                                Label("Current PIN", cls="pf-label", for_="pin-current"),
+                                                Div(cls="pf-input-wrap")(
+                                                    Span("🔒", cls="pf-input-icon"),
+                                                    Input(
+                                                        id="pin-current", name="current_pin", type="password",
+                                                        inputmode="numeric", maxlength="4", placeholder="••••",
+                                                        cls="pf-input", autocomplete="current-password",
+                                                    ),
+                                                ),
+                                            ),
+                                        ] if has_pin else []
+                                    ),
+                                    Div(cls="pf-field")(
+                                        Label("New PIN", cls="pf-label", for_="pin-new"),
+                                        Div(cls="pf-input-wrap")(
+                                            Span("🔑", cls="pf-input-icon"),
+                                            Input(
+                                                id="pin-new", name="new_pin", type="password",
+                                                inputmode="numeric", maxlength="4", placeholder="••••",
+                                                cls="pf-input", autocomplete="new-password",
+                                            ),
+                                        ),
+                                    ),
+                                    Div(cls="pf-field")(
+                                        Label("Confirm New PIN", cls="pf-label", for_="pin-confirm"),
+                                        Div(cls="pf-input-wrap")(
+                                            Span("🔑", cls="pf-input-icon"),
+                                            Input(
+                                                id="pin-confirm", name="confirm_pin", type="password",
+                                                inputmode="numeric", maxlength="4", placeholder="••••",
+                                                cls="pf-input", autocomplete="new-password",
+                                            ),
+                                        ),
+                                    ),
+                                    Button(
+                                        "Set PIN" if not has_pin else "Change PIN",
+                                        type="submit", cls="pf-save-btn",
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            Script("""
+function onPinSaved(event) {
+  if (event.detail.successful && event.detail.xhr.status === 200) {
+    var resp = event.detail.xhr.responseText;
+    if (resp && resp.indexOf('toast-success') !== -1) {
+      setTimeout(function(){ window.location.href = '/profile'; }, 1500);
+    }
+  }
+}
+"""),
+        ),
+    )
+
+
 def profile_page(user: UserProfile, transactions: list[Transaction]) -> FT:
     return Html(
         _head(),
@@ -93,7 +201,7 @@ def _profile_hero(user: UserProfile) -> FT:
         Button(
             _icon_edit(), " Edit",
             cls="pf-hero-edit-btn",
-            onclick="switchTab('overview')",
+            onclick="focusEditForm()",
             type="button",
         ),
     )
@@ -755,6 +863,7 @@ def _head() -> FT:
   border-radius:999px;border:1px solid var(--border);background:var(--card-bg);
   color:var(--text);font-size:0.82rem;font-weight:600;cursor:pointer;align-self:flex-start}
 .pf-hero-edit-btn:hover{border-color:var(--primary);color:var(--primary)}
+.app-header-back{font-size:0.88rem;font-weight:600;color:var(--primary);text-decoration:none;padding:6px 0}
 
 /* ── Stats strip ── */
 .pf-stats-strip{display:flex;background:var(--card-bg);border-radius:16px;padding:16px;
@@ -865,6 +974,13 @@ function updateThemeLabel() {
   if (el) el.textContent = document.documentElement.getAttribute('data-theme') === 'dark' ? 'Dark' : 'Light';
 }
 document.addEventListener('DOMContentLoaded', updateThemeLabel);
+
+/* ── Edit button — switch to overview and focus email input ── */
+function focusEditForm() {
+  switchTab('overview');
+  var el = document.getElementById('pf-email');
+  if (el) { el.focus(); el.scrollIntoView({behavior: 'smooth', block: 'center'}); }
+}
 
 /* ── Tab switcher ── */
 function switchTab(key) {

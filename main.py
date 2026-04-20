@@ -30,7 +30,7 @@ from components.pages.login import (
 )
 from components.pages.dashboard import dashboard_page
 from components.pages.profile import (
-    profile_page, verify_pending_html, verify_done_html,
+    profile_page, verify_pending_html, verify_done_html, change_pin_page,
 )
 from components.pages.new_deal import (
     new_deal_page, seller_found_card, seller_not_found, seller_blocked,
@@ -678,6 +678,64 @@ async def post(request: Request, session):
     return Response(status_code=204)
 
 
+# ─── Change / set security PIN ───────────────────────────────────────────────
+
+@rt("/profile/change-pin")
+async def get(session):
+    user_id = get_session_user(session)
+    if not user_id:
+        return RedirectResponse("/login", status_code=303)
+    user_row = await _get_user(user_id)
+    if not user_row:
+        session.clear()
+        return RedirectResponse("/login", status_code=303)
+    has_pin = bool(user_row.get("pin_hash"))
+    return change_pin_page(has_pin)
+
+
+@rt("/profile/change-pin")
+async def post(request: Request, session):
+    user_id = get_session_user(session)
+    if not user_id:
+        return Div(Div("Session expired. Please log in again.", cls="toast toast-error"))
+
+    form        = await request.form()
+    current_pin = form.get("current_pin", "").strip()
+    new_pin     = form.get("new_pin", "").strip()
+    confirm_pin = form.get("confirm_pin", "").strip()
+
+    if new_pin != confirm_pin:
+        return Div(Div("New PINs do not match. Please try again.", cls="toast toast-error"))
+
+    err = validate_pin(new_pin)
+    if err:
+        return Div(Div(err, cls="toast toast-error"))
+
+    user_row = await _get_user(user_id)
+    if not user_row:
+        return Div(Div("User not found.", cls="toast toast-error"))
+
+    existing_hash = user_row.get("pin_hash")
+    if existing_hash:
+        if not current_pin:
+            return Div(Div("Enter your current PIN.", cls="toast toast-error"))
+        valid, needs_rehash = verify_pin(current_pin, existing_hash)
+        if not valid:
+            _record_pin_fail(user_id)
+            lockout_msg = _check_pin_lockout(user_id)
+            if lockout_msg:
+                return Div(Div(lockout_msg, cls="toast toast-error"))
+            return Div(Div("Current PIN is incorrect.", cls="toast toast-error"))
+        _clear_pin_lockout(user_id)
+
+    new_hash = hash_pin(new_pin)
+    supabase = await get_supabase_admin()
+    await supabase.table("users").update({"pin_hash": new_hash}).eq("id", user_id).execute()
+    await _bust_user(user_id)
+    logger.info("PIN updated user=%s", user_id)
+    return Div(Div("✓ PIN saved successfully!", cls="toast toast-success"))
+
+
 # ─── Wallet verification ──────────────────────────────────────────────────────
 
 @rt("/profile/verify-gcash")
@@ -895,56 +953,73 @@ def get(session):
 
 
 @rt("/transactions/create")
-async def post(request: Request, session, item_description: str = "", amount_php: float = 0,
-               seller_id: str = "", protection_plan: str = "basic"):
+async def post(request: Request, session):
     buyer_id = get_session_user(session)
     if not buyer_id:
         return Div(Div("Session expired.", cls="toast toast-error"))
 
-    form = await request.form()
-    item_description = item_description or str(form.get("item_description", "")).strip()
-    amount_php       = amount_php or float(form.get("amount_php", 0) or 0)
-    seller_id        = seller_id  or str(form.get("seller_id", "")).strip()
-    protection_plan  = str(form.get("protection_plan", protection_plan)).strip()
-    lat, lon         = _parse_location(form)
+    try:
+        form = await request.form()
+        item_description = str(form.get("item_description", "")).strip()
+        seller_id        = str(form.get("seller_id", "")).strip()
+        protection_plan  = str(form.get("protection_plan", "basic")).strip()
+        lat, lon         = _parse_location(form)
 
-    amount_centavos = int(amount_php * 100)
-    plan = get_plan(protection_plan) if protection_plan in PLANS else get_tier(amount_centavos)
-    fee  = plan.fee_centavos(amount_centavos)
+        raw_amount = form.get("amount_php", "0") or "0"
+        try:
+            amount_php = float(raw_amount)
+        except (ValueError, TypeError):
+            return Div(Div("Invalid amount. Please go back and enter a number.", cls="toast toast-error"))
 
-    req = CreateTransactionRequest(
-        buyer_id=buyer_id,
-        seller_id=seller_id,
-        item_description=item_description,
-        amount_centavos=amount_centavos,
-        protection_plan=plan.id,
-        platform_fee_centavos=fee,
-    )
+        if not item_description or len(item_description) < 3:
+            return Div(Div("Item description is too short.", cls="toast toast-error"))
+        if not seller_id:
+            return Div(Div("No seller selected. Please go back and look up a seller first.", cls="toast toast-error"))
+        if amount_php < 50:
+            return Div(Div("Amount must be at least ₱50.", cls="toast toast-error"))
 
-    supabase = await get_supabase_admin()
-    row = (
-        await supabase.table("transactions").insert(req.model_dump()).execute()
-    ).data[0]
-    tx_id = row["id"]
+        amount_centavos = int(round(amount_php * 100))
+        plan = get_plan(protection_plan) if protection_plan in PLANS else get_tier(amount_centavos)
+        fee  = plan.fee_centavos(amount_centavos)
 
-    await log_event(tx_id, "deal_created",
-        f'Deal for \"{item_description}\" created \u00b7 \u20b1{amount_centavos / 100:,.0f}',
-        actor_id=buyer_id, lat=lat, lon=lon)
-    await log_event(tx_id, "tier_upgraded",
-        f"{plan.badge_icon} {plan.name} protection active \u00b7 {plan.min_photos} photos, {plan.review_hours}h review"
-        + (f" \u00b7 Service fee: \u20b1{fee / 100:,.2f}" if fee else " \u00b7 No service fee"),
-        icon=plan.badge_icon)
+        req = CreateTransactionRequest(
+            buyer_id=buyer_id,
+            seller_id=seller_id,
+            item_description=item_description,
+            amount_centavos=amount_centavos,
+            protection_plan=plan.id,
+            platform_fee_centavos=fee,
+        )
 
-    await _bust_tx_lists(buyer_id, seller_id)
-    # Notify seller of new deal
-    asyncio.create_task(notify_user(seller_id, "New Deal Request 🤝",
-        f"A buyer wants to create a protected deal for ₱{amount_centavos/100:,.0f}. Tap to review.",
-        f"/transactions/{tx_id}"))
-    logger.info("Transaction created tx=%s buyer=%s", tx_id, buyer_id)
-    return Div(
-        Div("Deal created!", cls="toast toast-success"),
-        Script(f"setTimeout(() => {{ window.location.href = '/transactions/{tx_id}'; }}, 800);"),
-    )
+        supabase = await get_supabase_admin()
+        result = await supabase.table("transactions").insert(req.model_dump()).execute()
+        if not result.data:
+            logger.error("Transaction insert returned no data buyer=%s", buyer_id)
+            return Div(Div("Could not create deal — please try again.", cls="toast toast-error"))
+        row   = result.data[0]
+        tx_id = row["id"]
+
+        await log_event(tx_id, "deal_created",
+            f'Deal for "{item_description}" created · ₱{amount_centavos / 100:,.0f}',
+            actor_id=buyer_id, lat=lat, lon=lon)
+        await log_event(tx_id, "tier_upgraded",
+            f"{plan.badge_icon} {plan.name} protection active · {plan.min_photos} photos, {plan.review_hours}h review"
+            + (f" · Service fee: ₱{fee / 100:,.2f}" if fee else " · No service fee"),
+            icon=plan.badge_icon)
+
+        await _bust_tx_lists(buyer_id, seller_id)
+        asyncio.create_task(notify_user(seller_id, "New Deal Request 🤝",
+            f"A buyer wants to create a protected deal for ₱{amount_centavos/100:,.0f}. Tap to review.",
+            f"/transactions/{tx_id}"))
+        logger.info("Transaction created tx=%s buyer=%s", tx_id, buyer_id)
+        return Div(
+            Div("Deal created!", cls="toast toast-success"),
+            Script(f"setTimeout(() => {{ window.location.href = '/transactions/{tx_id}'; }}, 800);"),
+        )
+
+    except Exception:
+        logger.exception("Transaction create failed buyer=%s", buyer_id)
+        return Div(Div("Something went wrong. Please try again.", cls="toast toast-error"))
 
 
 # ---------------------------------------------------------------------------

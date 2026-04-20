@@ -56,21 +56,23 @@ def _deal_form() -> FT:
                 P("Enter the seller's PH mobile number to look them up.",
                   cls="nd-card-sub"),
                 Form(
-                    Div(cls="nd-phone-wrap")(
-                        Span("+63", cls="nd-prefix"),
-                        Input(
-                            type="tel", name="phone",
-                            placeholder="9XX XXX XXXX",
-                            maxlength="10", inputmode="numeric",
-                            cls="form-input nd-phone-input",
-                            autocomplete="off", required=True,
+                    Div(cls="nd-phone-row")(
+                        Div(cls="nd-phone-wrap")(
+                            Span("+63", cls="nd-prefix"),
+                            Input(
+                                type="tel", name="phone",
+                                placeholder="9XX XXX XXXX",
+                                maxlength="10", inputmode="numeric",
+                                cls="form-input nd-phone-input",
+                                autocomplete="off", required=True,
+                            ),
                         ),
-                    ),
-                    Button(
-                        Span("Look Up"),
-                        Span(cls="htmx-indicator"),
-                        type="submit",
-                        cls="btn btn-primary btn-block nd-lookup-btn",
+                        Button(
+                            Span("Look Up"),
+                            Span(cls="htmx-indicator"),
+                            type="submit",
+                            cls="btn btn-primary nd-lookup-btn",
+                        ),
                     ),
                     hx_post="/sellers/lookup",
                     hx_target="#seller-result",

@@ -78,7 +78,11 @@ class Config:
         # ── Email (OTP delivery) ──────────────────────────────────────────────
         self.resend_api_key: str     = _optional("RESEND_API_KEY")
         self.email_from: str         = _optional("EMAIL_FROM", "Teluka <onboarding@resend.dev>")
-        # Legacy Gmail (kept for local dev fallback)
+        # Brevo (production API — no domain needed, works on all cloud platforms)
+        self.brevo_api_key: str      = _optional("BREVO_API_KEY")
+        self.brevo_sender_email: str = _optional("BREVO_SENDER_EMAIL", "llanesdanmarc@gmail.com")
+        self.brevo_sender_name: str  = _optional("BREVO_SENDER_NAME", "Teluka")
+        # Gmail SMTP (local dev only — blocked on most cloud platforms)
         self.gmail_user: str         = _optional("GMAIL_USER")
         self.gmail_app_password: str = _optional("GMAIL_APP_PASSWORD")
 
