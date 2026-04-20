@@ -1,30 +1,41 @@
 """
 Session helpers — expiry enforcement and clean login/logout.
+
+Two limits:
+  Absolute cap   — 30 days from login (hard ceiling)
+  Idle timeout   — 7 days since last activity (rolling window)
 """
 import time
 
-# Sessions expire after 30 days of inactivity.
-# Starlette's SessionMiddleware will also enforce its own max_age,
-# so this is a double-check at the application layer.
-_SESSION_MAX_AGE_SECONDS = 30 * 24 * 3600  # 30 days
+_SESSION_MAX_AGE_SECONDS  = 30 * 24 * 3600   # 30-day absolute cap
+_SESSION_IDLE_SECONDS     =  7 * 24 * 3600   #  7-day rolling idle window
 
 
 def get_session_user(session: dict) -> str | None:
     """
-    Return the authenticated user_id from the session, or None if:
-      - no session exists
-      - session is older than _SESSION_MAX_AGE_SECONDS
+    Return the authenticated user_id, or None if session is missing/expired.
+    Updates last_active_at on every valid call (rolling idle window).
     Clears an expired session so the cookie is invalidated.
     """
     user_id = session.get("user_id")
     if not user_id:
         return None
 
+    now      = time.time()
     login_at = session.get("login_at", 0)
-    if time.time() - login_at > _SESSION_MAX_AGE_SECONDS:
+    last_act = session.get("last_active_at", login_at)
+
+    # Hard 30-day absolute cap
+    if now - login_at > _SESSION_MAX_AGE_SECONDS:
         session.clear()
         return None
 
+    # Rolling 7-day idle timeout
+    if now - last_act > _SESSION_IDLE_SECONDS:
+        session.clear()
+        return None
+
+    session["last_active_at"] = int(now)
     return user_id
 
 
@@ -35,9 +46,11 @@ def set_session_user(session: dict, user_id: str, phone: str) -> None:
     Clears any prior session data first to prevent session fixation.
     """
     session.clear()
-    session["user_id"]  = user_id
-    session["phone"]    = phone
-    session["login_at"] = int(time.time())
+    now = int(time.time())
+    session["user_id"]        = user_id
+    session["phone"]          = phone
+    session["login_at"]       = now
+    session["last_active_at"] = now
 
 
 def clear_session(session: dict) -> None:

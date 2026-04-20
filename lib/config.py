@@ -88,6 +88,11 @@ class Config:
         # ── Redis (optional — Upstash free tier works well) ───────────────────
         self.redis_url: str = _optional("REDIS_URL")
 
+        # ── Auth hardening ────────────────────────────────────────────────────
+        # Server-side pepper for HMAC-SHA256 OTP hashing.
+        # Generate with: python -c "import secrets; print(secrets.token_hex(32))"
+        self.otp_secret: str = _optional("OTP_SECRET")
+
         # ── Web Push (VAPID) ─────────────────────────────────────────────────
         # Generate once with: python -c "from py_vapid import Vapid; v=Vapid(); v.generate_keys(); print(v.private_pem().decode()); print(v.public_key.decode())"
         self.vapid_private_key: str = _optional("VAPID_PRIVATE_KEY")

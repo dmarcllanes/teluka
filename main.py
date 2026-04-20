@@ -38,7 +38,7 @@ from components.pages.new_deal import (
 from components.pages.deal_detail import deal_detail_page
 from lib.otp_store import (
     create_otp, get_or_create_user, verify_otp as check_otp,
-    get_user_by_identifier, is_email,
+    get_user_by_identifier, is_email, log_auth_event,
 )
 from lib.pin import hash_pin, verify_pin, validate_pin
 from lib.email_sender import mask_email
@@ -209,6 +209,14 @@ def _parse_location(form) -> tuple[float | None, float | None]:
     return None, None
 
 
+def _get_client_ip(request: Request) -> str | None:
+    """Extract the real client IP, respecting X-Forwarded-For set by the platform."""
+    xff = request.headers.get("x-forwarded-for", "")
+    if xff:
+        return xff.split(",")[0].strip()
+    return getattr(request.client, "host", None)
+
+
 # ---------------------------------------------------------------------------
 # Health check (used by deployment platforms)
 # ---------------------------------------------------------------------------
@@ -298,7 +306,7 @@ def get():
 
 
 @rt("/check-identifier")
-async def post(identifier: str):
+async def post(request: Request, identifier: str):
     """
     Step 1: user enters phone or email.
     - Phone + existing user  → send OTP to their email → otp_step
@@ -307,6 +315,7 @@ async def post(identifier: str):
     - Email + not found      → error
     """
     identifier = identifier.strip()
+    client_ip  = _get_client_ip(request)
 
     if not identifier:
         return identifier_form_fragment(error="Please enter your phone number or email.")
@@ -320,7 +329,7 @@ async def post(identifier: str):
             )
         email = user["email"]
         try:
-            code = await create_otp(email)
+            code = await create_otp(email, ip=client_ip)
             sent = await enqueue_send_otp(email, code)
             if not sent:
                 return identifier_form_fragment(error="Failed to send email. Please try again.")
@@ -340,7 +349,6 @@ async def post(identifier: str):
     user = await get_user_by_identifier(normalised)
 
     if not user:
-        # New user — pre-fill phone in signup form and switch to signup tab
         return signup_form_fragment(phone=normalised)
 
     email = user.get("email")
@@ -350,7 +358,7 @@ async def post(identifier: str):
         )
 
     try:
-        code = await create_otp(email)
+        code = await create_otp(email, ip=client_ip)
         sent = await enqueue_send_otp(email, code)
         if not sent:
             return identifier_form_fragment(error="Failed to send email. Please try again.")
@@ -387,8 +395,9 @@ async def post(request: Request, phone: str, email: str):
             error="That email is already linked to another account. Use a different email.",
         )
 
+    client_ip = _get_client_ip(request)
     try:
-        code = await create_otp(email)
+        code = await create_otp(email, ip=client_ip)
         sent = await enqueue_send_otp(email, code)
         if not sent:
             return signup_form_fragment(phone=phone, error="Failed to send email. Please try again.")
@@ -404,10 +413,11 @@ async def post(request: Request, phone: str, email: str):
 
 
 @rt("/resend-otp")
-async def post(email: str):
+async def post(request: Request, email: str):
     """Re-send OTP to the same email."""
+    client_ip = _get_client_ip(request)
     try:
-        code = await create_otp(email)
+        code = await create_otp(email, ip=client_ip)
         sent = await enqueue_send_otp(email, code)
         if not sent:
             return Div(Div("Failed to send email. Please try again.", cls="toast toast-error"))
@@ -434,7 +444,8 @@ async def post(request: Request, session):
     if not clean_otp.isdigit() or len(clean_otp) != 6:
         return Div(Div("Please enter the 6-digit code from your email.", cls="toast toast-error"))
 
-    ok, error_msg = await check_otp(email, clean_otp)
+    client_ip = _get_client_ip(request)
+    ok, error_msg = await check_otp(email, clean_otp, ip=client_ip)
     if not ok:
         return Div(Div(error_msg, cls="toast toast-error"))
 
@@ -444,9 +455,23 @@ async def post(request: Request, session):
             # Existing user — log in directly
             user_id    = user["id"]
             user_phone = user["phone"]
-            # Regenerate session to prevent session fixation
             session.clear()
             set_session_user(session, user_id, user_phone)
+
+            # Detect login from new IP and update last_login_ip
+            old_ip = user.get("last_login_ip")
+            supabase_u = await get_supabase_admin()
+            await supabase_u.table("users").update({"last_login_ip": client_ip}).eq("id", user_id).execute()
+            if old_ip and old_ip != client_ip:
+                asyncio.create_task(notify_user(
+                    user_id,
+                    "New Login Location 🔐",
+                    "A login from a new location was detected. If this wasn't you, secure your account.",
+                    "/profile",
+                ))
+            asyncio.create_task(log_auth_event(
+                "login", user_id=user_id, identifier=mask_email(email), ip=client_ip, success=True
+            ))
         elif phone:
             # New user — go to PIN creation step before creating account
             return pin_step(phone=phone, email=email)
@@ -1123,12 +1148,19 @@ async def post(request: Request, session):
     if user_row and user_row.get("pin_hash"):
         if not pin:
             return Div(Div("Please enter your PIN to confirm this action.", cls="toast toast-error"))
-        if not verify_pin(pin, user_row["pin_hash"]):
+        valid, needs_rehash = verify_pin(pin, user_row["pin_hash"])
+        if not valid:
             _record_pin_fail(user_id)
             lockout_msg = _check_pin_lockout(user_id)
             err = lockout_msg or "Incorrect PIN. Please try again."
             return Div(Div(err, cls="toast toast-error"))
         _clear_pin_lockout(user_id)
+        if needs_rehash:
+            async def _upgrade_pin():
+                new_hash = hash_pin(pin)
+                sb = await get_supabase_admin()
+                await sb.table("users").update({"pin_hash": new_hash}).eq("id", user_id).execute()
+            asyncio.create_task(_upgrade_pin())
 
     row = (
         await supabase.table("transactions").select("*").eq("id", tx_id).single().execute()
