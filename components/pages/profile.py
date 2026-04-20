@@ -181,7 +181,7 @@ def _profile_hero(user: UserProfile) -> FT:
             Div(cls="avatar avatar-lg")(avatar_inner, Div(cls="avatar-ring")),
             Div("✏️", cls="pf-avatar-edit-badge"),
             cls="pf-avatar-btn",
-            onclick="switchTab('photos')",
+            **{"data-tab": "photos"},
             type="button",
             title="Update photo",
         ),
@@ -255,7 +255,6 @@ def _tab_bar() -> FT:
                 Span(label, cls="pf-tab-label"),
                 cls="pf-tab-btn" + (" pf-tab-active" if i == 0 else ""),
                 **{"data-tab": key},
-                onclick=f"switchTab('{key}')",
                 type="button",
             )
             for i, (key, label, icon) in enumerate(tabs)
@@ -269,23 +268,21 @@ def _tab_overview(user: UserProfile) -> FT:
     pct = int(user.trust_score)
     return Div(cls="pf-tab-panel pf-tab-panel-active", **{"data-panel": "overview"})(
 
-        # Edit profile card
+        # Account Info card — auto-saves on blur
         Div(cls="profile-card")(
             Div(cls="pf-card-header")(
                 Div(cls="pf-card-icon-wrap")(_icon_user_sm()),
                 Div(cls="pf-card-header-text")(
                     Div("Account Info", cls="profile-card-title"),
-                    Div("Email & phone details", cls="pf-card-sub"),
+                    Div("Tap a field to edit — saves automatically", cls="pf-card-sub"),
                 ),
             ),
-            Form(
-                hx_post="/profile/edit",
-                hx_swap="none",
-                hx_on__htmx_after_request="onEditSaved(event)",
-                cls="pf-form",
-            )(
+            Div(cls="pf-form")(
                 Div(cls="pf-field")(
-                    Label("Email address", cls="pf-label", for_="pf-email"),
+                    Div(cls="pf-field-row")(
+                        Label("Email address", cls="pf-label", for_="pf-email"),
+                        Div(id="pf-email-status", cls="pf-email-status"),
+                    ),
                     Div(cls="pf-input-wrap")(
                         Span("✉️", cls="pf-input-icon"),
                         Input(
@@ -293,6 +290,10 @@ def _tab_overview(user: UserProfile) -> FT:
                             value=user.email or "",
                             placeholder="you@example.com",
                             cls="pf-input", autocomplete="email",
+                            hx_post="/profile/edit",
+                            hx_trigger="blur changed",
+                            hx_target="#pf-email-status",
+                            hx_swap="innerHTML",
                         ),
                     ),
                     P("Used for OTP codes. Never shared.", cls="pf-hint"),
@@ -305,7 +306,6 @@ def _tab_overview(user: UserProfile) -> FT:
                     ),
                     P("Your phone is your identity — cannot be changed.", cls="pf-hint"),
                 ),
-                Button("Save Changes", type="submit", cls="pf-save-btn", id="pf-save-btn"),
             ),
         ),
 
@@ -902,6 +902,10 @@ def _head() -> FT:
 .pf-trust-hint{font-size:0.8rem;color:var(--muted);margin-top:10px;line-height:1.5}
 .pf-photo-ok{color:#34D399}
 .pf-form{display:flex;flex-direction:column;gap:12px}
+.pf-field-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.pf-field-row .pf-label{margin-bottom:0}
+.pf-email-status{font-size:0.75rem;font-weight:600}
+.pf-email-status .pf-email-saved{color:#34D399}
 
 /* ── PIN card ── */
 .pf-pin-card{padding:14px 16px}
@@ -975,6 +979,19 @@ function updateThemeLabel() {
 }
 document.addEventListener('DOMContentLoaded', updateThemeLabel);
 
+/* ── Tab event delegation (handles tab bar + avatar button) ── */
+document.addEventListener('DOMContentLoaded', function() {
+  var bar = document.getElementById('pf-tab-bar');
+  if (bar) bar.addEventListener('click', function(e) {
+    var btn = e.target.closest('[data-tab]');
+    if (btn) switchTab(btn.getAttribute('data-tab'));
+  });
+  var avatarBtn = document.querySelector('.pf-avatar-btn[data-tab]');
+  if (avatarBtn) avatarBtn.addEventListener('click', function() {
+    switchTab(avatarBtn.getAttribute('data-tab'));
+  });
+});
+
 /* ── Edit button — switch to overview and focus email input ── */
 function focusEditForm() {
   switchTab('overview');
@@ -996,12 +1013,6 @@ function switchTab(key) {
   var saved = localStorage.getItem('pf-tab');
   if (saved) switchTab(saved);
 })();
-
-/* ── Edit saved feedback ── */
-function onEditSaved(event) {
-  var ok = event.detail.successful;
-  _showToast(ok ? '✓ Profile saved' : '✗ Save failed — try again', ok ? 'success' : 'error');
-}
 
 /* ── Wallet verify ── */
 var _verifyOriginals = {};

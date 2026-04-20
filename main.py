@@ -675,7 +675,7 @@ async def post(request: Request, session):
     supabase = await get_supabase_admin()
     await supabase.table("users").update({"email": email or None}).eq("id", user_id).execute()
     await _bust_user(user_id)
-    return Response(status_code=204)
+    return HTMLResponse('<span class="pf-email-saved">✓ Saved</span>')
 
 
 # ─── Change / set security PIN ───────────────────────────────────────────────
