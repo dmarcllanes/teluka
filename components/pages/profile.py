@@ -1026,8 +1026,8 @@ function _verifyFormHTML(key, label, emoji) {
     + '<input class="vi-input" type="tel" inputmode="numeric" maxlength="11" '
     +   'id="' + key + '-num" name="' + key + '_number" placeholder="' + label + ' number (09xxxxxxxxx)">'
     + '<div class="vi-form-row">'
-    + '<button class="vi-cancel" onclick="cancelVerify(\'' + key + '\')" type="button">Cancel</button>'
-    + '<button class="vi-submit" type="button" onclick="submitVerify(\'' + key + '\', \'' + label + '\', \'' + emoji + '\')">Send ₱1 →</button>'
+    + '<button class="vi-cancel" onclick="cancelVerify(\\'' + key + '\\')" type="button">Cancel</button>'
+    + '<button class="vi-submit" type="button" onclick="submitVerify(\\'' + key + '\\', \\'' + label + '\\', \\'' + emoji + '\\')">Send ₱1 →</button>'
     + '</div></div></div>';
 }
 function submitVerify(key, label, emoji) {
