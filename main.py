@@ -899,14 +899,20 @@ async def post(request: Request, session):
 # ---------------------------------------------------------------------------
 
 @rt("/sellers/lookup")
-async def post(phone: str, session):
+async def post(request: Request, session):
     if not get_session_user(session):
-        return Div(Div("Session expired. Please log in again.", cls="toast toast-error"))
+        return seller_blocked("", "Session expired. Please log in again.")
+
+    form = await request.form()
+    phone = str(form.get("phone", "")).strip()
+
+    if not phone:
+        return seller_blocked("", "Please enter a phone number.")
 
     try:
         normalised = normalize_ph_phone(phone).e164
     except PhoneValidationError as e:
-        return Div(Div(str(e), cls="toast toast-error"))
+        return seller_blocked(phone, str(e))
 
     current_user_id = get_session_user(session)
     supabase = await get_supabase_admin()
@@ -928,8 +934,8 @@ async def post(phone: str, session):
     if not seller_row:
         return seller_not_found(normalised)
 
-    seller = UserProfile(**seller_row)
     try:
+        seller = UserProfile(**seller_row)
         result = analyze_risk(
             phone=seller.phone,
             trust_score=seller.trust_score,
@@ -938,6 +944,9 @@ async def post(phone: str, session):
         return seller_found_card(seller, result.flags)
     except ScamDetected as e:
         return seller_blocked(normalised, str(e))
+    except Exception:
+        logger.exception("seller lookup error phone=%s", normalised)
+        return seller_blocked(normalised, "Something went wrong — please try again.")
 
 
 # ---------------------------------------------------------------------------
@@ -1355,9 +1364,14 @@ async def post(request: Request, session):
 
 
 @rt("/transactions/cancel")
-async def post(tx_id: str, session):
-    if not get_session_user(session):
+async def post(request: Request, session):
+    user_id = get_session_user(session)
+    if not user_id:
         return Div(Div("Session expired.", cls="toast toast-error"))
+    form = await request.form()
+    tx_id = str(form.get("tx_id", "")).strip()
+    if not tx_id:
+        return Div(Div("Invalid request.", cls="toast toast-error"))
     supabase = await get_supabase_admin()
     row = (
         await supabase.table("transactions").select("*").eq("id", tx_id).single().execute()
@@ -1365,20 +1379,58 @@ async def post(tx_id: str, session):
     if not row:
         return Div(Div("Deal not found.", cls="toast toast-error"))
     tx = Transaction(**row)
-    user_id = get_session_user(session)
+    if user_id not in (tx.buyer_id, tx.seller_id):
+        return Div(Div("Not authorised.", cls="toast toast-error"))
+    if tx.status != TransactionStatus.PENDING:
+        return Div(Div("Cannot cancel a deal that already has payment activity.", cls="toast toast-error"))
     try:
         await cancel_escrow(tx)
         await _bust_tx_lists(tx.buyer_id, tx.seller_id)
-        event_type = "deal_refunded" if tx.payment_intent_id else "deal_cancelled"
-        desc = "Funds refunded to buyer" if tx.payment_intent_id else "Deal cancelled before payment"
-        await log_event(tx_id, event_type, desc, actor_id=user_id)
+        actor = "Buyer" if user_id == tx.buyer_id else "Seller"
+        await log_event(tx_id, "deal_cancelled", f"{actor} cancelled the deal before payment", actor_id=user_id)
         return Div(
             Div("Deal cancelled.", cls="toast toast-warn"),
-            Script("setTimeout(() => { window.location.href = '/dashboard'; }, 1200);"),
+            Script("setTimeout(function(){ window.location.href = '/dashboard'; }, 1200);"),
         )
-    except Exception as e:
+    except Exception:
         logger.exception("cancel_escrow failed tx=%s", tx_id)
-        return Div(Div(f"Cancellation failed: {e}", cls="toast toast-error"))
+        return Div(Div("Cancellation failed — please try again.", cls="toast toast-error"))
+
+
+@rt("/transactions/admin-review")
+async def post(request: Request, session):
+    """Request admin review for a paid deal the user wants to cancel."""
+    user_id = get_session_user(session)
+    if not user_id:
+        return Div(Div("Session expired.", cls="toast toast-error"))
+    form = await request.form()
+    tx_id  = str(form.get("tx_id", "")).strip()
+    reason = str(form.get("reason", "")).strip()
+    if not tx_id or not reason:
+        return Div(Div("Please describe the issue.", cls="toast toast-error"))
+    supabase = await get_supabase_admin()
+    row = (
+        await supabase.table("transactions").select("*").eq("id", tx_id).single().execute()
+    ).data
+    if not row:
+        return Div(Div("Deal not found.", cls="toast toast-error"))
+    tx = Transaction(**row)
+    if user_id not in (tx.buyer_id, tx.seller_id):
+        return Div(Div("Not authorised.", cls="toast toast-error"))
+    if tx.status == TransactionStatus.PENDING:
+        return Div(Div("This deal has no payment yet — you can cancel it directly.", cls="toast toast-warn"))
+    try:
+        actor = "Buyer" if user_id == tx.buyer_id else "Seller"
+        desc = f"{actor} requested admin review: {reason}"
+        await supabase.table("transactions").update(
+            {"status": TransactionStatus.DISPUTED}
+        ).eq("id", tx_id).execute()
+        await log_event(tx_id, "admin_review_requested", desc, actor_id=user_id)
+        await _bust_tx_lists(tx.buyer_id, tx.seller_id)
+        return Div(Div("Admin review requested. We'll contact you within 24 hours.", cls="toast toast-success"))
+    except Exception:
+        logger.exception("admin-review failed tx=%s", tx_id)
+        return Div(Div("Something went wrong — please try again.", cls="toast toast-error"))
 
 
 # ---------------------------------------------------------------------------

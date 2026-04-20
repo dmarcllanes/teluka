@@ -28,12 +28,17 @@ class Transaction(BaseModel):
     protection_plan: str = "basic" # "basic" | "standard" | "premium"
     status: TransactionStatus = TransactionStatus.PENDING
     payment_intent_id: Optional[str] = None
-    evidence_photo_urls: list[str] = Field(default_factory=list)
+    evidence_photo_urls: Optional[list[str]] = Field(default_factory=list)
     unboxing_video_url: Optional[str] = None
     delivery_tracking_id: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: Optional[datetime] = None
     expires_at: Optional[datetime] = None  # Asia/Manila timezone
+
+    @field_validator("evidence_photo_urls", mode="before")
+    @classmethod
+    def coerce_photo_urls(cls, v):
+        return v if isinstance(v, list) else []
 
     @property
     def total_centavos(self) -> int:

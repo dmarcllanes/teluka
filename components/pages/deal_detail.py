@@ -262,7 +262,7 @@ def _action_area(tx: Transaction, is_buyer: bool, is_seller: bool, tier=None) ->
         actions.append(countdown)
 
     # ── Tier 3: high-value deal warning (shown to buyer before paying) ─────
-    if tier.tier == 3 and tx.status == TransactionStatus.PENDING and is_buyer:
+    if tier.id == "premium" and tx.status == TransactionStatus.PENDING and is_buyer:
         actions.append(
             Div(cls="action-card action-card-tier3")(
                 Div(cls="action-card-title")("🏦 High-Value Deal — Extra Protection Active"),
@@ -504,20 +504,73 @@ def _action_area(tx: Transaction, is_buyer: bool, is_seller: bool, tier=None) ->
             )
         )
 
-    # ── Cancel (buyer only, pending) ───────────────────────────────────────
-    if is_buyer and tx.status == TransactionStatus.PENDING:
+    # ── Cancel (buyer OR seller, only when PENDING — no payment yet) ─────────
+    if (is_buyer or is_seller) and tx.status == TransactionStatus.PENDING:
+        role = "buyer" if is_buyer else "seller"
         actions.append(
-            Form(
-                Input(type="hidden", name="tx_id", value=tx.id),
-                Button(
-                    "Cancel Deal",
-                    type="submit",
-                    cls="btn btn-ghost btn-block",
-                    style="margin-top:8px;color:var(--muted);",
+            Div(cls="action-card action-card-cancel")(
+                Div(cls="action-card-title")("❌ Cancel this deal"),
+                P(
+                    "No payment has been made yet — you can cancel safely. "
+                    "Both parties will be notified." if role == "buyer" else
+                    "No payment has been made yet — you can cancel safely. "
+                    "The buyer will be notified.",
+                    cls="action-card-desc",
                 ),
-                hx_post="/transactions/cancel",
-                hx_target="#flash",
-                hx_swap="innerHTML",
+                Form(
+                    Input(type="hidden", name="tx_id", value=tx.id),
+                    Button(
+                        "Cancel Deal",
+                        type="submit",
+                        cls="btn btn-ghost btn-block",
+                        style="color:var(--muted);border-color:var(--border);",
+                    ),
+                    hx_post="/transactions/cancel",
+                    hx_target="#flash",
+                    hx_swap="innerHTML",
+                ),
+            )
+        )
+
+    # ── Request Admin Review (buyer OR seller, after payment) ─────────────
+    _paid_statuses = {
+        TransactionStatus.ESCROWED,
+        TransactionStatus.EVIDENCE_SUBMITTED,
+        TransactionStatus.IN_TRANSIT,
+        TransactionStatus.DELIVERED,
+        TransactionStatus.UNBOXING_UPLOADED,
+    }
+    if (is_buyer or is_seller) and tx.status in _paid_statuses:
+        actions.append(
+            Div(cls="action-card action-card-admin")(
+                Div(cls="action-card-title")("🛡️ Need admin help?"),
+                P(
+                    "If you want to cancel this deal or something has gone wrong, "
+                    "describe the issue and our team will review within 24 hours.",
+                    cls="action-card-desc",
+                ),
+                Form(
+                    Input(type="hidden", name="tx_id", value=tx.id),
+                    Div(cls="form-group")(
+                        Label("Describe the issue", cls="form-label"),
+                        Input(
+                            name="reason", cls="form-input",
+                            placeholder="e.g. Item not as described, want to cancel…",
+                            required=True,
+                        ),
+                    ),
+                    Button(
+                        Span("Request Admin Review"),
+                        Span(cls="htmx-indicator"),
+                        type="submit",
+                        cls="btn btn-block",
+                        style="background:rgba(59,130,246,0.12);color:#60A5FA;border:1px solid rgba(59,130,246,0.3);border-radius:999px;padding:12px 24px;font-weight:700;cursor:pointer;font-family:inherit;font-size:0.95rem;",
+                    ),
+                    hx_post="/transactions/admin-review",
+                    hx_target="#flash",
+                    hx_swap="innerHTML",
+                    hx_indicator="find .htmx-indicator",
+                ),
             )
         )
 
