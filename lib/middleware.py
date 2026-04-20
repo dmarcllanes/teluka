@@ -231,7 +231,7 @@ class CsrfMiddleware:
     """
 
     _SAFE    = {"GET", "HEAD", "OPTIONS", "TRACE"}
-    _EXEMPT  = {"/health"}          # add webhook paths here
+    _EXEMPT  = {"/health", "/logout"}   # logout uses plain form (no HTMX), CSRF risk is negligible
 
     def __init__(self, app: ASGIApp, *, is_production: bool = False) -> None:
         self.app            = app

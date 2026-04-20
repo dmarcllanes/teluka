@@ -38,6 +38,9 @@
   --muted:  #94A3B8;
   --subtle: #64748B;
 
+  --primary:  #0D9488;
+  --card-bg:  rgba(255,255,255,0.04);
+
   --success: #10b981;
   --danger:  #FB7185;
   --warning: #FACC15;
@@ -61,6 +64,9 @@
   --text:   #1E293B;
   --muted:  #64748B;
   --subtle: #475569;
+
+  --primary:  #0D9488;
+  --card-bg:  #FFFFFF;
 
   --success: #059669;
   --danger:  #E11D48;

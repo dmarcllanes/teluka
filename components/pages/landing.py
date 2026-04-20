@@ -146,9 +146,8 @@ def _navbar() -> FT:
                 A("How it works", href="#how"),
                 A("Reviews", href="#reviews"),
                 A("Sign In →", href="/login", cls="btn-shimmer", style="padding:10px 22px;font-size:0.88rem"),
-                _theme_btn,
             ),
-            Div(cls="lnav-links", style="gap:8px;")(
+            Div(cls="lnav-controls")(
                 _theme_btn,
                 Button(
                     Span(), Span(), Span(),
