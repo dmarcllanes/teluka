@@ -311,10 +311,56 @@ def _action_area(tx: Transaction, is_buyer: bool, is_seller: bool, tier=None) ->
                 Div(cls="action-card-title")("📸 Upload real photos of the item"),
                 P(f"Take photos right now — must be fresh. {photo_sub}.",
                   cls="action-card-desc"),
+
+                # ── Live camera capture UI ─────────────────────────────────
+                Div(id="item-camera-wrap", style="display:none")(
+                    Div(id="item-cam-status", cls="trust-status trust-status-detecting")(
+                        "📷 Point camera at the item…"
+                    ),
+                    Div(cls="trust-video-wrap")(
+                        Video(
+                            id="item-cam-video", autoplay=True, playsinline=True, muted=True,
+                            cls="trust-camera-feed",
+                            style="transform:none",
+                        ),
+                        Canvas(id="item-cam-overlay", cls="trust-overlay"),
+                    ),
+                    Div(cls="trust-live-bar-track")(
+                        Div(id="item-live-bar", cls="trust-live-bar", style="width:0%"),
+                    ),
+                    Div(id="item-bar-label", cls="trust-bar-label")("Liveness scan starting…"),
+                    Div(id="item-cam-challenge", cls="trust-challenge", style="visibility:hidden"),
+                    Canvas(id="item-cam-canvas",
+                           style="position:absolute;left:-9999px;top:-9999px;width:1px;height:1px"),
+                    Div(cls="trust-camera-controls")(
+                        Button("Cancel", cls="tp-cancel-btn", type="button",
+                               onclick="cancelItemCamera()"),
+                    ),
+                ),
+
+                # ── Primary: open-camera button ────────────────────────────
+                Button(
+                    "📷 Capture Live Photo",
+                    cls="btn btn-primary btn-block", type="button",
+                    id="item-cam-open-btn",
+                    onclick=f"startItemCamera('{tx.id}')",
+                    style="margin-bottom:10px",
+                ),
+
+                # ── Divider ────────────────────────────────────────────────
+                Div(style="display:flex;align-items:center;gap:10px;margin:12px 0")(
+                    Div(style="flex:1;height:1px;background:var(--border)"),
+                    Span("or upload from gallery",
+                         style="font-size:0.75rem;color:var(--muted);white-space:nowrap"),
+                    Div(style="flex:1;height:1px;background:var(--border)"),
+                ),
+
+                # ── Fallback: file upload form ─────────────────────────────
                 Form(
                     Input(type="hidden", name="tx_id", value=tx.id),
                     Div(cls="form-group")(
-                        Div(cls="file-drop-zone", id="photo-drop", onclick="document.getElementById('photo-input').click()")(
+                        Div(cls="file-drop-zone", id="photo-drop",
+                            onclick="document.getElementById('photo-input').click()")(
                             Input(
                                 name="photos", type="file",
                                 accept="image/jpeg,image/png,image/webp",
@@ -327,7 +373,8 @@ def _action_area(tx: Transaction, is_buyer: bool, is_seller: bool, tier=None) ->
                             Div(cls="file-drop-text")(
                                 Span("Tap to choose photos"), " or drag them here"
                             ),
-                            Div(f"JPEG / PNG / WebP · Max 10 MB each · Min {tier.min_photos} photos", cls="file-drop-hint"),
+                            Div(f"JPEG / PNG / WebP · Max 10 MB each · Min {tier.min_photos} photos",
+                                cls="file-drop-hint"),
                         ),
                         Div(cls="file-preview-list", id="photo-preview"),
                     ),
@@ -753,6 +800,168 @@ document.querySelectorAll('.file-drop-zone').forEach(function(zone) {
     inp.dispatchEvent(new Event('change'));
   });
 });
+
+/* ── Item liveness check ── */
+var _itemStream=null,_itemInterval=null,_prevItemFrame=null;
+var _itemMotionHist=[],_itemLiveScore=0,_itemState='idle';
+var _ITEM_MICRO=0.15,_ITEM_ACTION=5.0,_ITEM_SCORE_THRESH=30;
+var _itemChallenges=['Move item slightly ↔','Rotate the item','Tilt the item forward','Lift item up briefly'];
+
+function startItemCamera(txId) {
+  var wrap=document.getElementById('item-camera-wrap');
+  var openBtn=document.getElementById('item-cam-open-btn');
+  if(!wrap)return;
+  _itemState='idle';_itemLiveScore=0;_prevItemFrame=null;_itemMotionHist=[];
+  navigator.mediaDevices.getUserMedia({
+    video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:960}}
+  }).then(function(stream){
+    _itemStream=stream;
+    var video=document.getElementById('item-cam-video');
+    video.srcObject=stream;
+    wrap.style.display='';
+    if(openBtn)openBtn.style.display='none';
+    _itemResetUI();
+    video.addEventListener('loadeddata',function(){
+      var ov=document.getElementById('item-cam-overlay');
+      if(ov){ov.width=video.videoWidth||640;ov.height=video.videoHeight||480;}
+      _itemState='detecting';
+      _itemInterval=setInterval(function(){_itemLiveLoop(txId);},150);
+    },{once:true});
+  }).catch(function(){
+    var flash=document.getElementById('flash');
+    if(flash)flash.innerHTML='<div class="toast toast-error">Camera access denied — allow permission and try again.</div>';
+    setTimeout(function(){if(flash)flash.innerHTML='';},3200);
+  });
+}
+
+function _itemResetUI() {
+  _itemSetStatus('📷 Point camera at the item…',false);
+  _itemSetBar(0);_itemSetBarLabel('Liveness scan starting…');_itemHideChallenge();
+}
+
+function _itemLiveLoop(txId) {
+  var video=document.getElementById('item-cam-video');
+  if(!video||video.readyState<2||_itemState==='captured')return;
+  var w=video.videoWidth,h=video.videoHeight;if(!w||!h)return;
+  var canvas=document.getElementById('item-cam-canvas'),scale=0.2;
+  var sw=Math.floor(w*scale),sh=Math.floor(h*scale);
+  canvas.width=sw;canvas.height=sh;
+  var ctx=canvas.getContext('2d',{willReadFrequently:true});
+  ctx.drawImage(video,0,0,sw,sh);
+  var px=ctx.getImageData(0,0,sw,sh).data;
+  var motion=0;
+  if(_prevItemFrame&&_prevItemFrame.length===px.length){
+    for(var i=0;i<px.length;i+=4)
+      motion+=(Math.abs(px[i]-_prevItemFrame[i])+Math.abs(px[i+1]-_prevItemFrame[i+1])+Math.abs(px[i+2]-_prevItemFrame[i+2]))/3;
+    motion/=px.length/4;
+  }
+  _prevItemFrame=new Uint8ClampedArray(px);
+  _itemMotionHist.push(motion);
+  if(_itemMotionHist.length>20)_itemMotionHist.shift();
+  var avg=_itemMotionHist.reduce(function(a,b){return a+b;},0)/(_itemMotionHist.length||1);
+  var recent5=_itemMotionHist.slice(-5).reduce(function(a,b){return a+b;},0)/5;
+  _drawItemRect(avg>_ITEM_MICRO);
+
+  if(_itemState==='detecting'){
+    if(avg>_ITEM_MICRO)_itemLiveScore=Math.min(_itemLiveScore+3,100);
+    else _itemLiveScore=Math.max(_itemLiveScore-1,0);
+    _itemSetBar(_itemLiveScore);
+    _itemSetBarLabel('Scanning live environment… '+Math.round(_itemLiveScore)+'%');
+    _itemSetStatus(avg>_ITEM_MICRO?'✓ Item detected — hold steady…':'📷 Point camera at the item…',avg>_ITEM_MICRO);
+    if(_itemLiveScore>=_ITEM_SCORE_THRESH){
+      _itemState='challenging';
+      var ch=_itemChallenges[Math.floor(Math.random()*_itemChallenges.length)];
+      _itemShowChallenge('👉 '+ch);
+      _itemSetStatus('Challenge: '+ch,true);
+      _itemSetBarLabel('Perform the action to confirm the item is real');
+    }
+  } else if(_itemState==='challenging'){
+    if(recent5>_ITEM_ACTION){
+      _itemState='captured';
+      clearInterval(_itemInterval);_itemInterval=null;
+      _itemSetBar(100);_itemSetBarLabel('✓ Liveness confirmed!');
+      _itemSetStatus('✓ Real item confirmed — capturing…',true);
+      _itemHideChallenge();
+      setTimeout(function(){_doItemCapture(txId);},700);
+    }
+  }
+}
+
+function _drawItemRect(isLive) {
+  var ov=document.getElementById('item-cam-overlay');if(!ov)return;
+  var ctx=ov.getContext('2d'),w=ov.width,h=ov.height;
+  ctx.clearRect(0,0,w,h);
+  var mx=w*0.05,my=h*0.06,rw=w*0.9,rh=h*0.88,r=16;
+  ctx.save();
+  ctx.fillStyle='rgba(0,0,0,0.28)';ctx.fillRect(0,0,w,h);
+  ctx.globalCompositeOperation='destination-out';
+  ctx.beginPath();
+  ctx.moveTo(mx+r,my);ctx.lineTo(mx+rw-r,my);ctx.quadraticCurveTo(mx+rw,my,mx+rw,my+r);
+  ctx.lineTo(mx+rw,my+rh-r);ctx.quadraticCurveTo(mx+rw,my+rh,mx+rw-r,my+rh);
+  ctx.lineTo(mx+r,my+rh);ctx.quadraticCurveTo(mx,my+rh,mx,my+rh-r);
+  ctx.lineTo(mx,my+r);ctx.quadraticCurveTo(mx,my,mx+r,my);
+  ctx.closePath();ctx.fill();
+  ctx.globalCompositeOperation='source-over';
+  // corner brackets when live
+  if(isLive){
+    var cs=Math.min(w,h)*0.07;
+    ctx.strokeStyle='#34D399';ctx.lineWidth=3;
+    [[mx,my+cs,mx,my,mx+cs,my],[mx+rw-cs,my,mx+rw,my,mx+rw,my+cs],
+     [mx,my+rh-cs,mx,my+rh,mx+cs,my+rh],[mx+rw-cs,my+rh,mx+rw,my+rh,mx+rw,my+rh-cs]
+    ].forEach(function(p){ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(p[2],p[3]);ctx.lineTo(p[4],p[5]);ctx.stroke();});
+  }
+  ctx.beginPath();
+  ctx.moveTo(mx+r,my);ctx.lineTo(mx+rw-r,my);ctx.quadraticCurveTo(mx+rw,my,mx+rw,my+r);
+  ctx.lineTo(mx+rw,my+rh-r);ctx.quadraticCurveTo(mx+rw,my+rh,mx+rw-r,my+rh);
+  ctx.lineTo(mx+r,my+rh);ctx.quadraticCurveTo(mx,my+rh,mx,my+rh-r);
+  ctx.lineTo(mx,my+r);ctx.quadraticCurveTo(mx,my,mx+r,my);
+  ctx.closePath();
+  ctx.strokeStyle=isLive?'rgba(52,211,153,0.5)':'rgba(255,255,255,0.35)';
+  ctx.lineWidth=isLive?2:1.5;ctx.stroke();
+  ctx.restore();
+}
+
+function _itemSetStatus(txt,ok){var el=document.getElementById('item-cam-status');if(!el)return;el.textContent=txt;el.className='trust-status '+(ok?'trust-status-ok':'trust-status-detecting');}
+function _itemSetBar(pct){var el=document.getElementById('item-live-bar');if(el)el.style.width=Math.min(pct,100)+'%';}
+function _itemSetBarLabel(txt){var el=document.getElementById('item-bar-label');if(el)el.textContent=txt;}
+function _itemShowChallenge(txt){var el=document.getElementById('item-cam-challenge');if(!el)return;el.textContent=txt;el.style.visibility='';el.classList.add('trust-challenge-pulse');}
+function _itemHideChallenge(){var el=document.getElementById('item-cam-challenge');if(el){el.style.visibility='hidden';el.classList.remove('trust-challenge-pulse');}}
+
+function _doItemCapture(txId) {
+  var video=document.getElementById('item-cam-video');
+  var canvas=document.getElementById('item-cam-canvas');
+  if(!video||!canvas)return;
+  canvas.width=video.videoWidth;canvas.height=video.videoHeight;
+  canvas.getContext('2d').drawImage(video,0,0);
+  canvas.toBlob(function(blob){
+    if(_itemStream){_itemStream.getTracks().forEach(function(t){t.stop();});_itemStream=null;}
+    document.getElementById('item-camera-wrap').style.display='none';
+    var ob=document.getElementById('item-cam-open-btn');if(ob)ob.style.display='';
+    var fd=new FormData();
+    fd.append('tx_id',txId);
+    fd.append('photos',blob,'live_item.jpg');
+    var m=document.cookie.match(/(?:^|;[ ]*)csrf_token=([^;]*)/);
+    var hdrs=m?{'X-CSRF-Token':decodeURIComponent(m[1])}:{};
+    var flash=document.getElementById('flash');
+    if(flash)flash.innerHTML='<div class="toast toast-success">Uploading liveness-verified photo…</div>';
+    fetch('/transactions/evidence',{method:'POST',headers:hdrs,body:fd})
+      .then(function(r){return r.text();})
+      .then(function(html){
+        if(flash){flash.innerHTML=html;setTimeout(function(){flash.innerHTML='';},3500);}
+        setTimeout(function(){location.reload();},1300);
+      }).catch(function(){
+        if(flash)flash.innerHTML='<div class="toast toast-error">Upload failed — try again</div>';
+      });
+  },'image/jpeg',0.92);
+}
+
+function cancelItemCamera() {
+  clearInterval(_itemInterval);_itemInterval=null;
+  if(_itemStream){_itemStream.getTracks().forEach(function(t){t.stop();});_itemStream=null;}
+  _itemState='idle';_itemLiveScore=0;_prevItemFrame=null;_itemMotionHist=[];
+  document.getElementById('item-camera-wrap').style.display='none';
+  var ob=document.getElementById('item-cam-open-btn');if(ob)ob.style.display='';
+}
 
 /* ── Scroll-hide header/nav ── */
 (function () {
